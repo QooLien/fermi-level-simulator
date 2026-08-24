@@ -18,7 +18,8 @@
 - Vg/Vgs 與 Vds 均提供直接數值輸入、±微調按鈕，以及 1 mV / 5 mV / 10 mV / 50 mV / 100 mV 步進。
 - I-V / C-V 分頁：MOS capacitor 顯示理想 Ig≈0 與 low/high-frequency normalized C-V；MOSFET 顯示 normalized Id-Vds 與 Cgs/Cgd/Cg-Vgs。
 - 主介面下方整合即時數學推導：包含 `ψs=±2|φF|`、`ΔEc,i,v=-qψs`、表面載子濃度關係、nMOS/pMOS 區域不等式、`VGD` 判斷與分段 `ID` 方程，並直接代入目前偏壓。
-- `VALIDATION_REPORT.md` 記錄公式推導、12 項自動驗證、審查修正與模型適用邊界。
+- [`docs/VALIDATION_REPORT.md`](docs/VALIDATION_REPORT.md) 記錄公式推導、12 項自動驗證、審查修正與模型適用邊界。
+- [`docs/FORMULA_GUIDE.md`](docs/FORMULA_GUIDE.md) 集中整理 MOS capacitor 與 MOSFET 使用的完整數學式。
 - 元件剖面直接顯示介面載子、耗盡區、反轉層、通道與 pinch-off。
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
 - 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。
@@ -32,5 +33,21 @@
 執行：
 
 ```text
-python -m unittest -v test_regions.py
+python -m unittest discover -s tests -v
+```
+
+## 資料夾結構
+
+```text
+fermi-level-simulator/
+├─ app.py                 # Tkinter 主介面
+├─ region_visuals.py      # 物理模型、區域判定與繪圖
+├─ run_simulator.bat      # Windows 啟動器
+├─ requirements.txt
+├─ docs/
+│  ├─ FORMULA_GUIDE.md
+│  ├─ VALIDATION_REPORT.md
+│  └─ images/             # MOS Cap / MOSFET 預覽圖
+└─ tests/
+   └─ test_regions.py
 ```
