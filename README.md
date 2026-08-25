@@ -26,6 +26,10 @@
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
 - 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。
 
+## 中文教材
+
+- [MOS 能帶、費米能階與載子流動教材（PDF）](docs/MOS_Band_Carrier_Textbook_ZH-TW.pdf)
+
 ## 模型假設與限制
 
 本工具是電壓驅動的物理示意圖，刻意不使用 Cox、tox、摻雜濃度或其他製程參數。工作區域門檻、能量與載子數量是定性呈現，不輸出精確濃度或電流。
