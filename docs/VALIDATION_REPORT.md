@@ -177,7 +177,7 @@ C_{gs}\approx\frac{2C_0}{3},\qquad C_{gd}\approx0
 
 ## Automated validation results
 
-- 12 項單元／公式測試：全部通過。
+- 14 項單元／公式測試：全部通過，包含三種 MOSFET 區域預設與 3D 視角傳遞。
 - MOS capacitor P/N symmetry 與 mass-action：`1,201` 個 Vg 點通過。
 - MOSFET region、current 與 nMOS/pMOS symmetry：`14,641` 組 Vgs/Vds 通過。
 - Pinch-off current continuity：`500` 個不同 overdrive boundary 通過。

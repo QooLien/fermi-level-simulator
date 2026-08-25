@@ -4,7 +4,8 @@ from matplotlib.figure import Figure
 
 from region_visuals import (NORMALIZED_PHI_F, NORMALIZED_VT, REGIONS,
                             draw_curves, draw_scene, moscap_operating_point,
-                            mosfet_operating_point, operating_region)
+                            mosfet_operating_point, mosfet_region_preset,
+                            operating_region)
 
 
 class RegionSceneTests(unittest.TestCase):
@@ -46,6 +47,24 @@ class RegionSceneTests(unittest.TestCase):
                                  bulk_type="N-type", vg=-1.8, vds=-1.3)
         self.assertEqual(figure.axes[1].name, "3d")
         self.assertIn("pMOS", description)
+
+    def test_mosfet_region_presets_cover_all_views_and_mirror_pmos(self):
+        for region in REGIONS["MOSFET"]:
+            n_vgs, n_vds = mosfet_region_preset("P-type", region)
+            p_vgs, p_vds = mosfet_region_preset("N-type", region)
+            self.assertEqual(operating_region("MOSFET", "P-type", n_vgs, n_vds), region)
+            self.assertEqual(operating_region("MOSFET", "N-type", p_vgs, p_vds), region)
+            self.assertAlmostEqual(n_vgs, -p_vgs)
+            self.assertAlmostEqual(n_vds, -p_vds)
+
+    def test_mosfet_3d_view_angles_are_applied(self):
+        figure = Figure(figsize=(8, 4))
+        draw_scene(figure, "MOSFET", bulk_type="P-type", vg=1.8, vds=.3,
+                   view_elev=42, view_azim=115)
+        axis = figure.axes[1]
+        self.assertEqual(axis.name, "3d")
+        self.assertAlmostEqual(axis.elev, 42)
+        self.assertAlmostEqual(axis.azim, 115)
 
     def test_electrical_curves_render_for_both_bulk_types(self):
         for device, bulk, vg, vds in (("MOS Capacitor", "P-type", 1.2, 0),
