@@ -63,6 +63,18 @@ def operating_region(device, bulk_type, vg, vds=0.0):
     return mosfet_operating_point(bulk_type, vg, vds)["region"]
 
 
+def mosfet_region_preset(bulk_type, region):
+    """Return representative normalized biases for a requested MOSFET region."""
+    presets = {"Cutoff": (.40, .20),
+               "Linear": (1.80, .30),
+               "Saturation": (1.80, 1.30)}
+    if region not in presets:
+        raise ValueError(f"Unknown MOSFET region preset: {region}")
+    polarity = 1.0 if bulk_type == "P-type" else -1.0
+    vgs, vds = presets[region]
+    return polarity*vgs, polarity*vds
+
+
 def _flow_dots(start, end, count, phase):
     t = (np.linspace(0, 1, count, endpoint=False) + phase) % 1.0
     return start + (end - start) * t
@@ -87,12 +99,13 @@ def _charge_symbols(ax, x, ys, sign):
         ax.text(x, y, sign, color=color, fontsize=14, weight="bold", ha="center", va="center")
 
 
-def draw_scene(fig, device, region=None, phase=0.0, bulk_type="P-type", vg=0.0, vds=0.0):
+def draw_scene(fig, device, region=None, phase=0.0, bulk_type="P-type", vg=0.0, vds=0.0,
+               view_elev=24.0, view_azim=-61.0):
     fig.clear()
     region = region or operating_region(device, bulk_type, vg, vds)
     if device == "MOS Capacitor":
         return _draw_moscap(fig, region, phase, bulk_type, vg)
-    return _draw_mosfet(fig, region, phase, bulk_type, vg, vds)
+    return _draw_mosfet(fig, region, phase, bulk_type, vg, vds, view_elev, view_azim)
 
 
 def _draw_moscap(fig, region, phase, bulk_type, vg):
@@ -262,7 +275,7 @@ def _draw_moscap_formula(ax, bulk_type, vg, region):
     ax.text(.67, .18, live, fontsize=11.0, va="center", color=PURPLE)
 
 
-def _draw_mosfet(fig, region, phase, bulk_type, vgs, vds):
+def _draw_mosfet(fig, region, phase, bulk_type, vgs, vds, view_elev, view_azim):
     grid = fig.add_gridspec(2, 2, height_ratios=(4.8, 1.55))
     ax_device = fig.add_subplot(grid[0, 0])
     ax_band = fig.add_subplot(grid[0, 1], projection="3d")
@@ -359,7 +372,8 @@ def _draw_mosfet(fig, region, phase, bulk_type, vgs, vds):
     ax_band.text(.86,.08,float(ei[1,-2]+.75),f"{contact} drain",fontsize=9,weight="bold")
     ax_band.set_title(f"3D gate-controlled bands — {region}",fontsize=13,weight="bold")
     ax_band.set_xlabel("x: Source → Drain"); ax_band.set_ylabel("y: interface width"); ax_band.set_zlabel("Normalized energy")
-    ax_band.set_box_aspect((1.5,.8,1)); ax_band.view_init(elev=24,azim=-61)
+    ax_band.set_box_aspect((1.5,.8,1))
+    ax_band.view_init(elev=float(view_elev), azim=float(view_azim))
     ax_band.legend(loc="lower left",fontsize=8,ncol=2); ax_band.grid(alpha=.13)
     _draw_mosfet_formula(ax_formula, bulk_type, vgs, vds, region)
     fig.suptitle(f"{device_name} · {bulk_type} bulk · Vgs={vgs:+.2f} V · Vds={vds:+.2f} V · Vs=Vb=0",fontsize=14)

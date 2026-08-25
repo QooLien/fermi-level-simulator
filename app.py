@@ -5,7 +5,8 @@ from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
-from region_visuals import draw_curves, draw_scene, operating_region
+from region_visuals import (draw_curves, draw_scene, mosfet_region_preset,
+                            operating_region)
 
 
 class VoltageVisualizer(tk.Tk):
@@ -19,6 +20,11 @@ class VoltageVisualizer(tk.Tk):
         self.vg = tk.DoubleVar(value=0.0)
         self.vds = tk.DoubleVar(value=0.0)
         self.fine_step = tk.DoubleVar(value=.01)
+        self.region_view = tk.StringVar(value="Follow voltage")
+        self.view_elev = tk.DoubleVar(value=24.0)
+        self.view_azim = tk.DoubleVar(value=-61.0)
+        self._applying_region_preset = False
+        self._dragging_3d = False
         self.phase = 0.0
         self._build()
         self._device_changed()
@@ -96,6 +102,24 @@ class VoltageVisualizer(tk.Tk):
         self.region_text = ttk.Label(detail_row, style="Region.TLabel")
         self.region_text.pack(side="left")
 
+        self.mosfet_view_group = ttk.LabelFrame(controls, text="MOSFET 3D view", padding=(8, 5))
+        ttk.Label(self.mosfet_view_group, text="Region view").pack(side="left")
+        region_box = ttk.Combobox(self.mosfet_view_group, textvariable=self.region_view,
+                                  state="readonly", width=15,
+                                  values=("Follow voltage", "Cutoff", "Linear", "Saturation"))
+        region_box.pack(side="left", padx=(5, 18))
+        region_box.bind("<<ComboboxSelected>>", lambda _e: self._region_view_changed())
+        self.elev_label = ttk.Label(self.mosfet_view_group, width=18)
+        self.elev_label.pack(side="left")
+        ttk.Scale(self.mosfet_view_group, from_=0, to=90, variable=self.view_elev, length=145,
+                  command=lambda _v: self._view_changed()).pack(side="left", padx=(0, 18))
+        self.azim_label = ttk.Label(self.mosfet_view_group, width=19)
+        self.azim_label.pack(side="left")
+        ttk.Scale(self.mosfet_view_group, from_=-180, to=180, variable=self.view_azim, length=190,
+                  command=lambda _v: self._view_changed()).pack(side="left", padx=(0, 8))
+        ttk.Button(self.mosfet_view_group, text="Reset view", command=self._reset_3d_view).pack(side="left")
+        self._update_view_labels()
+
         tabs = ttk.Notebook(self)
         tabs.pack(fill="both", expand=True, padx=10)
         band_tab = ttk.Frame(tabs)
@@ -105,6 +129,8 @@ class VoltageVisualizer(tk.Tk):
         self.figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.canvas = FigureCanvasTkAgg(self.figure, master=band_tab)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.canvas.mpl_connect("button_press_event", self._plot_button_pressed)
+        self.canvas.mpl_connect("button_release_event", self._plot_button_released)
         NavigationToolbar2Tk(self.canvas, band_tab, pack_toolbar=True).update()
         self.curve_figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.curve_canvas = FigureCanvasTkAgg(self.curve_figure, master=curve_tab)
@@ -120,8 +146,11 @@ class VoltageVisualizer(tk.Tk):
     def _device_changed(self):
         if self.device.get() == "MOSFET":
             self.vds_group.pack(side="left", padx=(22, 0))
+            self.mosfet_view_group.pack(fill="x", pady=(5, 0))
         else:
             self.vds_group.pack_forget()
+            self.mosfet_view_group.pack_forget()
+            self.region_view.set("Follow voltage")
             self.vds.set(0.0)
         self._bulk_changed()
 
@@ -137,7 +166,60 @@ class VoltageVisualizer(tk.Tk):
                 self.vds_spin.configure(from_=-3, to=0)
                 if self.vds.get() > 0:
                     self.vds.set(0.0)
+            if self.region_view.get() != "Follow voltage":
+                self._apply_region_preset()
+                return
         self._voltage_changed()
+
+    def _region_view_changed(self):
+        if self.device.get() != "MOSFET" or self.region_view.get() == "Follow voltage":
+            self._redraw()
+            return
+        self._apply_region_preset()
+
+    def _apply_region_preset(self):
+        region = self.region_view.get()
+        if region == "Follow voltage":
+            return
+        vgs, vds = mosfet_region_preset(self.bulk.get(), region)
+        self._applying_region_preset = True
+        try:
+            self.vg.set(vgs)
+            self.vds.set(vds)
+            self._voltage_changed()
+        finally:
+            self._applying_region_preset = False
+
+    def _view_changed(self):
+        self._update_view_labels()
+        self._redraw(update_curves=False, capture_view=False)
+
+    def _reset_3d_view(self):
+        self.view_elev.set(24.0)
+        self.view_azim.set(-61.0)
+        self._view_changed()
+
+    def _update_view_labels(self):
+        self.elev_label.configure(text=f"Elevation: {self.view_elev.get():.0f}°")
+        self.azim_label.configure(text=f"Azimuth: {self.view_azim.get():.0f}°")
+
+    def _plot_button_pressed(self, event):
+        if event.inaxes is not None and event.inaxes.name == "3d":
+            self._dragging_3d = True
+
+    def _plot_button_released(self, event):
+        if self._dragging_3d:
+            self._capture_3d_view(event.inaxes if event.inaxes is not None else None)
+            self._dragging_3d = False
+
+    def _capture_3d_view(self, axis=None):
+        candidates = [axis] if axis is not None else self.figure.axes
+        for candidate in candidates:
+            if candidate is not None and candidate.name == "3d":
+                self.view_elev.set(float(candidate.elev))
+                self.view_azim.set(float(candidate.azim))
+                self._update_view_labels()
+                return
 
     def _nudge(self, variable, direction):
         low, high = -3, 3
@@ -163,16 +245,21 @@ class VoltageVisualizer(tk.Tk):
                          else min(0, vds_value))
         self.vg.set(vg_value)
         self.vds.set(vds_value)
+        if self.device.get() == "MOSFET" and not self._applying_region_preset:
+            self.region_view.set("Follow voltage")
         vg_name = "Vgs" if self.device.get() == "MOSFET" else "Vg"
         self.vg_label.configure(text=f"{vg_name} = {vg_value:+.3f} V")
         self.vds_label.configure(text=f"Vds = {vds_value:+.3f} V")
         self._redraw()
 
-    def _redraw(self, update_curves=True):
+    def _redraw(self, update_curves=True, capture_view=True):
+        if capture_view and self.device.get() == "MOSFET":
+            self._capture_3d_view()
         region = operating_region(self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get())
         self.region_text.configure(text=region)
         description = draw_scene(self.figure, self.device.get(), region, self.phase,
-                                 bulk_type=self.bulk.get(), vg=self.vg.get(), vds=self.vds.get())
+                                 bulk_type=self.bulk.get(), vg=self.vg.get(), vds=self.vds.get(),
+                                 view_elev=self.view_elev.get(), view_azim=self.view_azim.get())
         self.status.set(description)
         self.canvas.draw_idle()
         if update_curves:
@@ -181,7 +268,8 @@ class VoltageVisualizer(tk.Tk):
 
     def _animate(self):
         self.phase = (self.phase + .07) % 1.0
-        self._redraw(update_curves=False)
+        if not self._dragging_3d:
+            self._redraw(update_curves=False)
         self.after(280, self._animate)
 
 
