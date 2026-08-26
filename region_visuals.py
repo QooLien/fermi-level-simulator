@@ -530,7 +530,7 @@ def _sigmoid(value):
     return 1.0 / (1.0 + np.exp(-np.clip(value, -60, 60)))
 
 
-def draw_curves(fig, device, bulk_type="P-type", vg=0.0, vds=0.0):
+def draw_curves(fig, device, bulk_type="P-type", vg=0.0, vds=0.0, plot="both"):
     """Draw normalized qualitative I-V and C-V curves with live bias markers."""
     fig.clear()
     ax_iv, ax_cv = fig.subplots(1, 2)
@@ -634,3 +634,9 @@ def draw_curves(fig, device, bulk_type="P-type", vg=0.0, vds=0.0):
     for axis in (ax_iv, ax_cv):
         axis.grid(alpha=.18)
         axis.spines[["top", "right"]].set_visible(False)
+    if plot == "iv":
+        fig.delaxes(ax_cv)
+        ax_iv.set_position((.11, .13, .84, .76))
+    elif plot == "cv":
+        fig.delaxes(ax_iv)
+        ax_cv.set_position((.11, .13, .84, .76))

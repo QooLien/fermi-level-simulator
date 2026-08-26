@@ -101,6 +101,16 @@ class RegionSceneTests(unittest.TestCase):
         self.assertAlmostEqual(max(abs(v) for v in result["curves"][0]["vds"]), 3.0)
         self.assertAlmostEqual(result["curves"][0]["id"][-1], result["curves"][0]["idsat"])
 
+    def test_iv_and_cv_can_render_as_separate_figures(self):
+        iv = Figure(figsize=(6, 3))
+        cv = Figure(figsize=(6, 3))
+        draw_curves(iv, "MOSFET", vg=1.8, vds=.3, plot="iv")
+        draw_curves(cv, "MOSFET", vg=1.8, vds=.3, plot="cv")
+        self.assertEqual(len(iv.axes), 1)
+        self.assertEqual(len(cv.axes), 1)
+        self.assertIn("I-V", iv.axes[0].get_title())
+        self.assertIn("C-V", cv.axes[0].get_title())
+
     def test_electrical_curves_render_for_both_bulk_types(self):
         for device, bulk, vg, vds in (("MOS Capacitor", "P-type", 1.2, 0),
                                       ("MOS Capacitor", "N-type", -1.2, 0),

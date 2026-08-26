@@ -157,10 +157,20 @@ class VoltageVisualizer(tk.Tk):
         self.canvas.mpl_connect("button_press_event", self._plot_button_pressed)
         self.canvas.mpl_connect("button_release_event", self._plot_button_released)
         NavigationToolbar2Tk(self.canvas, band_tab, pack_toolbar=True).update()
-        self.curve_figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
-        self.curve_canvas = FigureCanvasTkAgg(self.curve_figure, master=curve_tab)
-        self.curve_canvas.get_tk_widget().pack(fill="both", expand=True)
-        NavigationToolbar2Tk(self.curve_canvas, curve_tab, pack_toolbar=True).update()
+        curve_split = ttk.PanedWindow(curve_tab, orient="vertical")
+        curve_split.pack(fill="both", expand=True)
+        iv_frame = ttk.Frame(curve_split)
+        cv_frame = ttk.Frame(curve_split)
+        curve_split.add(iv_frame, weight=1)
+        curve_split.add(cv_frame, weight=1)
+        self.iv_figure = Figure(figsize=(13.2, 4.2), dpi=100, constrained_layout=True)
+        self.iv_canvas = FigureCanvasTkAgg(self.iv_figure, master=iv_frame)
+        self.iv_canvas.get_tk_widget().pack(fill="both", expand=True)
+        NavigationToolbar2Tk(self.iv_canvas, iv_frame, pack_toolbar=True).update()
+        self.cv_figure = Figure(figsize=(13.2, 4.2), dpi=100, constrained_layout=True)
+        self.cv_canvas = FigureCanvasTkAgg(self.cv_figure, master=cv_frame)
+        self.cv_canvas.get_tk_widget().pack(fill="both", expand=True)
+        NavigationToolbar2Tk(self.cv_canvas, cv_frame, pack_toolbar=True).update()
 
         footer = ttk.Frame(self, padding=(16, 3, 16, 8))
         footer.pack(fill="x")
@@ -188,6 +198,8 @@ class VoltageVisualizer(tk.Tk):
         try:
             raw = self.predict_specified.get().replace("，", ",")
             specified = [float(item.strip()) for item in raw.split(",") if item.strip()] or None
+            if specified is not None and not any(abs(value - self.vg.get()) < 1e-9 for value in specified):
+                specified.insert(0, self.vg.get())
             result = predict_mosfet_iv_sweep(self.bulk.get(), self.vg.get(), self.predict_vt.get(),
                                              self.predict_idsat.get(), self.predict_step.get(),
                                              self.predict_points.get(), specified_vgs=specified)
@@ -308,21 +320,26 @@ class VoltageVisualizer(tk.Tk):
         self.status.set(description)
         self.canvas.draw_idle()
         if update_curves:
-            draw_curves(self.curve_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get())
+            draw_curves(self.iv_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get(), plot="iv")
+            draw_curves(self.cv_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get(), plot="cv")
             if self.device.get() == "MOSFET" and self.prediction_result:
                 self._draw_prediction_curves()
-            self.curve_canvas.draw_idle()
+            self.iv_canvas.draw_idle()
+            self.cv_canvas.draw_idle()
 
     def _draw_prediction_curves(self):
         """Overlay measured-anchor Vg sweep curves on the lower local I-V chart."""
-        if not self.curve_figure.axes:
+        if not self.iv_figure.axes:
             return
-        axis = self.curve_figure.axes[0]
-        # Prediction mode owns the legend: hide the baseline teaching curves'
-        # legend entries while retaining their faint context lines.
-        for artist in (*axis.lines, *axis.collections):
-            if artist.get_label() and not artist.get_label().startswith("pred Vgs="):
-                artist.set_label("_nolegend_")
+        axis = self.iv_figure.axes[0]
+        # Prediction mode replaces the baseline output plot entirely: no
+        # three faint reference curves, selected-bias marker, or right legend.
+        axis.clear()
+        axis.set_xlabel("Drain voltage Vds (V)")
+        axis.set_ylabel("Normalized drain current Id")
+        axis.set_xlim(-3, 3)
+        axis.grid(alpha=.18)
+        axis.spines[["top", "right"]].set_visible(False)
         colors = ("#1877c9", "#762aa5", "#d84343", "#2e7d32", "#ef8a00", "#00838f")
         for index, curve in enumerate(self.prediction_result["curves"]):
             color = colors[index % len(colors)]
@@ -339,8 +356,9 @@ class VoltageVisualizer(tk.Tk):
                 bbox=dict(boxstyle="round,pad=.22", fc="white", ec=color, alpha=.88),
                 arrowprops=dict(arrowstyle="-", color=color, lw=.8),
             )
-        axis.set_title("MOSFET output I-V · measured-anchor Vg prediction", fontsize=13, weight="bold")
-        axis.legend(loc="best", fontsize=7, ncol=2)
+        # Pinch-off labels carry the readout; prediction mode intentionally
+        # omits a separate legend to keep the chart uncluttered.
+        axis.set_title("MOSFET output I-V · predicted Vg sweep", fontsize=13, weight="bold")
 
     def _animate(self):
         self.phase = (self.phase + .07) % 1.0
