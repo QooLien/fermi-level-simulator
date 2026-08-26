@@ -142,7 +142,9 @@ def predict_mosfet_iv_sweep(bulk_type, anchor_vg, vt, idsat, step=0.1,
     for row in result["rows"]:
         overdrive = row["overdrive"]
         vds_cutoff = max(overdrive, 0.0)
-        vds_drive = np.linspace(0.0, max(1.25*vds_cutoff, .1), int(samples))
+        # Sweep through the full normalized output-voltage window so the
+        # post-pinch-off constant-current plateau is visible to the chart edge.
+        vds_drive = np.linspace(0.0, 3.0, int(samples))
         current = np.where(vds_drive < vds_cutoff,
                            k*(overdrive*vds_drive - .5*vds_drive**2),
                            .5*k*overdrive**2)

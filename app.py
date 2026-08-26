@@ -318,6 +318,11 @@ class VoltageVisualizer(tk.Tk):
         if not self.curve_figure.axes:
             return
         axis = self.curve_figure.axes[0]
+        # Prediction mode owns the legend: hide the baseline teaching curves'
+        # legend entries while retaining their faint context lines.
+        for artist in (*axis.lines, *axis.collections):
+            if artist.get_label() and not artist.get_label().startswith("pred Vgs="):
+                artist.set_label("_nolegend_")
         colors = ("#1877c9", "#762aa5", "#d84343", "#2e7d32", "#ef8a00", "#00838f")
         for index, curve in enumerate(self.prediction_result["curves"]):
             axis.plot(curve["vds"], curve["id"], lw=2.0, color=colors[index % len(colors)],

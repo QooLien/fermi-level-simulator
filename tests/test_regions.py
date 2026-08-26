@@ -98,6 +98,8 @@ class RegionSceneTests(unittest.TestCase):
         self.assertAlmostEqual(result["rows"][0]["pinch_off_vds"], 1.0)
         self.assertEqual(len(result["curves"]), 3)
         self.assertAlmostEqual(result["curves"][1]["idsat"], .32)
+        self.assertAlmostEqual(max(abs(v) for v in result["curves"][0]["vds"]), 3.0)
+        self.assertAlmostEqual(result["curves"][0]["id"][-1], result["curves"][0]["idsat"])
 
     def test_electrical_curves_render_for_both_bulk_types(self):
         for device, bulk, vg, vds in (("MOS Capacitor", "P-type", 1.2, 0),
