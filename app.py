@@ -325,10 +325,20 @@ class VoltageVisualizer(tk.Tk):
                 artist.set_label("_nolegend_")
         colors = ("#1877c9", "#762aa5", "#d84343", "#2e7d32", "#ef8a00", "#00838f")
         for index, curve in enumerate(self.prediction_result["curves"]):
-            axis.plot(curve["vds"], curve["id"], lw=2.0, color=colors[index % len(colors)],
+            color = colors[index % len(colors)]
+            axis.plot(curve["vds"], curve["id"], lw=2.0, color=color,
                       label=f"pred Vgs={curve['vg']:+.3f} V")
-            axis.scatter([curve["pinch_off_vds"]], [curve["idsat"]], s=28,
-                         color=colors[index % len(colors)], zorder=6)
+            pinch_vds = curve["pinch_off_vds"]
+            idsat = curve["idsat"]
+            axis.scatter([pinch_vds], [idsat], s=30, color=color, zorder=6)
+            axis.annotate(
+                f"Vg={curve['vg']:+.3f} V\nIdsat={idsat:.4f}",
+                xy=(pinch_vds, idsat),
+                xytext=(8, 10 + (index % 3) * 22), textcoords="offset points",
+                fontsize=7.5, color=color,
+                bbox=dict(boxstyle="round,pad=.22", fc="white", ec=color, alpha=.88),
+                arrowprops=dict(arrowstyle="-", color=color, lw=.8),
+            )
         axis.set_title("MOSFET output I-V · measured-anchor Vg prediction", fontsize=13, weight="bold")
         axis.legend(loc="best", fontsize=7, ncol=2)
 
