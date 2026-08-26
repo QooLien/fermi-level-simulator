@@ -6,6 +6,7 @@ from region_visuals import (NORMALIZED_PHI_F, NORMALIZED_VT, REGIONS,
                             draw_curves, draw_scene, moscap_operating_point,
                             mosfet_operating_point, mosfet_region_preset,
                             operating_region, predict_mosfet_vt_idsat)
+from region_visuals import predict_mosfet_iv_sweep
 
 
 class RegionSceneTests(unittest.TestCase):
@@ -89,6 +90,14 @@ class RegionSceneTests(unittest.TestCase):
         self.assertEqual([round(row["vg"], 1) for row in pmos["rows"]], [-1.8, -1.6])
         specified = predict_mosfet_vt_idsat("P-type", 1.0, specified_vgs=[1.0, .8, .6])
         self.assertEqual([row["region"] for row in specified["rows"]], ["Saturation", "Cutoff", "Cutoff"])
+
+    def test_measured_pinch_off_anchor_predicts_k_and_each_iv_curve(self):
+        result = predict_mosfet_iv_sweep("P-type", 1.8, .8, .5, step=.2, points=3)
+        self.assertAlmostEqual(result["k"], 1.0)
+        self.assertAlmostEqual(result["rows"][0]["idsat"], .5)
+        self.assertAlmostEqual(result["rows"][0]["pinch_off_vds"], 1.0)
+        self.assertEqual(len(result["curves"]), 3)
+        self.assertAlmostEqual(result["curves"][1]["idsat"], .32)
 
     def test_electrical_curves_render_for_both_bulk_types(self):
         for device, bulk, vg, vds in (("MOS Capacitor", "P-type", 1.2, 0),

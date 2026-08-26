@@ -43,7 +43,7 @@ input[type="range"] { accent-color: var(--blue); display: block; margin: 10px 0 
 .model-chip { background: #f3eafd; border-radius: 999px; color: var(--purple); font-size: 12px; font-weight: 700; padding: 7px 10px; white-space: nowrap; }
 .formula-note, .predictor-message { color: var(--muted); font-size: 12px; margin: 10px 0; }
 .math { color: var(--ink); font-family: Georgia, serif; font-size: 14px; }
-.predictor-controls { align-items: end; display: grid; gap: 11px; grid-template-columns: 130px 110px minmax(210px, 1fr) auto; }
+.predictor-controls { align-items: end; display: grid; gap: 11px; grid-template-columns: 110px 110px 110px 90px minmax(210px, 1fr) auto; }
 .predictor-controls input { background: #fbfdff; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); display: block; font: inherit; margin-top: 5px; padding: 8px 9px; width: 100%; }
 .primary-button { background: var(--blue); border: 1px solid var(--blue); border-radius: 10px; color: white; cursor: pointer; font: inherit; font-weight: 700; padding: 9px 13px; white-space: nowrap; }
 .primary-button:hover, .primary-button:focus-visible { background: #1263a8; outline: 2px solid rgba(24, 119, 201, .18); }
@@ -54,6 +54,8 @@ input[type="range"] { accent-color: var(--blue); display: block; margin: 10px 0 
 .prediction-table th:last-child, .prediction-table td:last-child { text-align: center; }
 .region-cutoff { color: var(--muted); font-weight: 700; }
 .region-saturation { color: var(--purple); font-weight: 700; }
+.predictor-plot { margin-top: 10px; overflow-x: auto; }
+.predictor-plot svg { background: #fbfdff; border: 1px solid var(--line); border-radius: 10px; min-width: 620px; width: 100%; }
 .tabs { display: flex; gap: 8px; margin: 18px 0 10px; }
 .tab { background: transparent; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; font: inherit; font-weight: 700; padding: 8px 12px; }
 .tab.active { border-color: var(--blue); color: var(--blue); }

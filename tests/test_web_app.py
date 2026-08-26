@@ -39,12 +39,15 @@ class WebAppTests(unittest.TestCase):
 
     def test_vt_idsat_prediction_endpoint_supports_step_and_specified_values(self):
         self.client.post("/api/state", json={"device": "MOSFET", "bulk": "P-type", "vg": 1.8})
-        response = self.client.post("/api/predict", json={"step": .2, "points": 4})
+        response = self.client.post("/api/predict", json={"vt": .8, "idsat": .5, "step": .2, "points": 4})
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(len(payload["rows"]), 4)
         self.assertAlmostEqual(payload["rows"][1]["vg"], 1.6)
-        specified = self.client.post("/api/predict", json={"specified_vgs": "1.0, 0.8, 0.6"})
+        self.assertIn("curves", payload)
+        self.assertAlmostEqual(payload["rows"][0]["pinch_off_vds"], 1.0)
+        specified = self.client.post("/api/predict", json={"vt": .8, "idsat": .5,
+                                                            "specified_vgs": "1.0, 0.8, 0.6"})
         self.assertEqual(specified.status_code, 200)
         self.assertEqual([row["region"] for row in specified.get_json()["rows"]],
                          ["Saturation", "Cutoff", "Cutoff"])

@@ -124,6 +124,40 @@ def predict_mosfet_vt_idsat(bulk_type, anchor_vg, step=0.1, points=5,
             "step": step, "points": len(rows), "vt": vt, "k": k}
 
 
+def predict_mosfet_iv_sweep(bulk_type, anchor_vg, vt, idsat, step=0.1,
+                            points=5, specified_vgs=None, samples=41):
+    """Infer k from one measured pinch-off point and predict lower-Vg Id-Vds curves."""
+    result = predict_mosfet_vt_idsat(bulk_type, anchor_vg, step, points,
+                                     specified_vgs=specified_vgs, vt=vt, k=1.0)
+    anchor_drive = max(result["rows"][0]["gate_drive"], 0.0)
+    anchor_overdrive = anchor_drive - float(vt)
+    idsat = float(idsat)
+    if anchor_overdrive <= 0 or idsat < 0:
+        raise ValueError("anchor Vg must exceed Vt and Idsat must be non-negative")
+    k = 2.0 * idsat / anchor_overdrive**2
+    if k <= 0:
+        raise ValueError("Idsat must be positive for a pinch-off anchor")
+    polarity = 1.0 if bulk_type == "P-type" else -1.0
+    curves = []
+    for row in result["rows"]:
+        overdrive = row["overdrive"]
+        vds_cutoff = max(overdrive, 0.0)
+        vds_drive = np.linspace(0.0, max(1.25*vds_cutoff, .1), int(samples))
+        current = np.where(vds_drive < vds_cutoff,
+                           k*(overdrive*vds_drive - .5*vds_drive**2),
+                           .5*k*overdrive**2)
+        row["idsat"] = float(.5*k*overdrive**2)
+        row["pinch_off_vds"] = float(polarity*vds_cutoff)
+        curves.append({"vg": row["vg"], "vds": (polarity*vds_drive).tolist(),
+                       "id": (polarity*current).tolist(),
+                       "idsat": row["idsat"],
+                       "pinch_off_vds": row["pinch_off_vds"]})
+    return {"rows": result["rows"], "curves": curves, "source": result["source"],
+            "anchor_vg": result["anchor_vg"], "anchor_vt": float(vt),
+            "anchor_idsat": idsat, "step": result["step"],
+            "points": len(result["rows"]), "vt": float(vt), "k": float(k)}
+
+
 def _flow_dots(start, end, count, phase):
     t = (np.linspace(0, 1, count, endpoint=False) + phase) % 1.0
     return start + (end - start) * t

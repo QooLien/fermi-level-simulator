@@ -6,7 +6,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from region_visuals import (draw_curves, draw_scene, mosfet_region_preset,
-                            operating_region, predict_mosfet_vt_idsat)
+                            operating_region, predict_mosfet_iv_sweep)
 
 
 class VoltageVisualizer(tk.Tk):
@@ -25,6 +25,8 @@ class VoltageVisualizer(tk.Tk):
         self.view_azim = tk.DoubleVar(value=-61.0)
         self.predict_step = tk.DoubleVar(value=.10)
         self.predict_points = tk.IntVar(value=5)
+        self.predict_vt = tk.DoubleVar(value=.80)
+        self.predict_idsat = tk.DoubleVar(value=.50)
         self.predict_specified = tk.StringVar()
         self.predict_message = tk.StringVar(value="以目前 Vgs 為第一個預測點")
         self._applying_region_preset = False
@@ -125,6 +127,12 @@ class VoltageVisualizer(tk.Tk):
         self._update_view_labels()
 
         self.predictor_group = ttk.LabelFrame(controls, text="MOSFET Vt / Idsat prediction", padding=(8, 5))
+        ttk.Label(self.predictor_group, text="錨點 Vt").pack(side="left")
+        ttk.Spinbox(self.predictor_group, from_=0, to=3, increment=.01,
+                    textvariable=self.predict_vt, width=6, format="%.2f").pack(side="left", padx=(4, 8))
+        ttk.Label(self.predictor_group, text="錨點 Idsat").pack(side="left")
+        ttk.Spinbox(self.predictor_group, from_=0.001, to=100, increment=.01,
+                    textvariable=self.predict_idsat, width=7, format="%.3f").pack(side="left", padx=(4, 8))
         ttk.Label(self.predictor_group, text="step (V)").pack(side="left")
         ttk.Spinbox(self.predictor_group, from_=.01, to=1, increment=.01,
                     textvariable=self.predict_step, width=6, format="%.2f").pack(side="left", padx=(4, 10))
@@ -178,12 +186,12 @@ class VoltageVisualizer(tk.Tk):
         try:
             raw = self.predict_specified.get().replace("，", ",")
             specified = [float(item.strip()) for item in raw.split(",") if item.strip()] or None
-            result = predict_mosfet_vt_idsat(self.bulk.get(), self.vg.get(),
-                                             self.predict_step.get(), self.predict_points.get(),
-                                             specified_vgs=specified)
-            rows = "; ".join(f"Vg={row['vg']:+.2f} V, Vt={row['vt']:.2f} V, Vov={row['overdrive']:.2f} V, Idsat={row['idsat']:.3f} ({row['region']})"
+            result = predict_mosfet_iv_sweep(self.bulk.get(), self.vg.get(), self.predict_vt.get(),
+                                             self.predict_idsat.get(), self.predict_step.get(),
+                                             self.predict_points.get(), specified_vgs=specified)
+            rows = "; ".join(f"Vg={row['vg']:+.2f}, VDS,pinch-off={row['pinch_off_vds']:+.2f}, Idsat={row['idsat']:.3f}"
                              for row in result["rows"])
-            self.predict_message.set(rows)
+            self.predict_message.set(f"k={result['k']:.4f}; {rows}")
         except (tk.TclError, ValueError) as exc:
             self.predict_message.set(f"輸入錯誤：{exc}")
 

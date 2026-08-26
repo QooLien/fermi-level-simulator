@@ -15,7 +15,7 @@ from flask import Flask, jsonify, render_template, request
 from matplotlib.figure import Figure
 
 from region_visuals import (draw_curves, draw_scene, mosfet_region_preset,
-                            operating_region, predict_mosfet_vt_idsat)
+                            operating_region, predict_mosfet_iv_sweep)
 
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
@@ -128,16 +128,18 @@ def predict():
             return jsonify({"error": "Vt / Idsat 預測器僅適用於 MOSFET。"}), 400
         try:
             anchor = float(payload.get("anchor_vg", STATE["vg"]))
+            vt = float(payload.get("vt", 0.8))
+            idsat = float(payload.get("idsat", 0.5))
             step = float(payload.get("step", 0.1))
             points = int(payload.get("points", 5))
             specified = _parse_vg_list(payload.get("specified_vgs", ""))
-            result = predict_mosfet_vt_idsat(STATE["bulk"], anchor, step, points,
-                                              specified_vgs=specified)
+            result = predict_mosfet_iv_sweep(STATE["bulk"], anchor, vt, idsat, step, points,
+                                             specified_vgs=specified)
         except (TypeError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
         result["bulk"] = STATE["bulk"]
-        result["note"] = ("VT 與 k 為 normalized 教學假設；單一 Vg 無法實際萃取 VT。"
-                           " Idsat = ½k·max(|VGS|-|VT|,0)²。")
+        result["note"] = ("以輸入 pinch-off 錨點反推 k = 2Idsat/VOV²；"
+                           "各 Vg 的 pinch-off 發生於 |VDS|=VOV。")
         return jsonify(result)
 
 

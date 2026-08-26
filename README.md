@@ -27,7 +27,7 @@
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
 - 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。MOSFET 另以紫色箭頭標示 conventional current：nMOS 的 \(I_D\) 為 Drain → Source，pMOS 的 \(|I_D|\) 為 Source → Drain。
 - 瀏覽器版提供手機觸控操作、MOSFET 區域預設、3D Elevation／Azimuth 視角與 I–V / C–V 分頁；服務預設監聽 `0.0.0.0:5000`，僅建議在可信任的區域網路中使用。
-- 瀏覽器版 MOSFET 另提供 Vt／Idsat 預測器：以目前單一 Vg 為錨點，按可調 step 與點數往截止方向掃描，或直接輸入指定 Vg 清單。使用 `VOV=max(|VGS|-|VT|,0)`、`IDSAT=1/2·k·VOV²`，其中 `|VT|=0.800 V`、`k=1` 是明確的 normalized 教學假設；單一 Vg 無法實際萃取物理 VT。
+- 瀏覽器版 MOSFET 另提供 Vt／Idsat 預測器：手動輸入一組 pinch-off 錨點 `Vg、Vt、Idsat`，由 `k=2·Idsat/VOV²` 反推，再按可調 step 與點數往截止方向掃描，或直接輸入指定 Vg 清單。每個 Vg 都輸出 `VDS,pinch-off=VOV`、`Idsat` 與完整 normalized `Id–Vds` 曲線。
 
 ## 中文教材
 

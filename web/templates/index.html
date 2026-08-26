@@ -76,6 +76,12 @@
       </div>
       <p class="formula-note">以 <span class="math">V<sub>OV</sub> = max(|V<sub>GS</sub>| − |V<sub>T</sub>|, 0)</span>、<span class="math">I<sub>DSAT</sub> = ½kV<sub>OV</sub><sup>2</sup></span> 計算。VT 與 k 是 normalized 教學假設；單一 Vg 不能實際萃取物理 VT。</p>
       <div class="predictor-controls">
+        <label>錨點 Vt (V)
+          <input id="predict-vt" type="number" min="0" max="3" step="0.001" value="0.800">
+        </label>
+        <label>錨點 Idsat
+          <input id="predict-idsat" type="number" min="0.000001" max="100" step="0.001" value="0.500">
+        </label>
         <label>Vg step (V)
           <input id="predict-step" type="number" min="0.01" max="1" step="0.01" value="0.10">
         </label>
@@ -90,10 +96,11 @@
       <p class="predictor-message" id="predictor-message">按下預測後，將以目前 Vg 作為第一個點。</p>
       <div class="table-wrap">
         <table class="prediction-table">
-          <thead><tr><th>Vg (V)</th><th>Vt (V)</th><th>Vov (V)</th><th>Idsat (norm.)</th><th>區域</th></tr></thead>
-          <tbody id="prediction-body"><tr><td colspan="5">尚未產生預測</td></tr></tbody>
+          <thead><tr><th>Vg (V)</th><th>Vt (V)</th><th>Vov (V)</th><th>VDS,pinch-off (V)</th><th>Idsat</th><th>區域</th></tr></thead>
+          <tbody id="prediction-body"><tr><td colspan="6">尚未產生預測</td></tr></tbody>
         </table>
       </div>
+      <div class="predictor-plot" id="predictor-plot" aria-label="預測 Id-Vds 曲線"></div>
     </section>
 
     <nav class="tabs" aria-label="圖表分頁">
