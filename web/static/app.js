@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 let updateTimer = null;
 let pending = {};
+let lastPrediction = null;
 
 function formatVoltage(value) {
   return `${Number(value).toFixed(3)} V`;
@@ -30,6 +31,7 @@ function syncControls(data) {
 }
 
 function renderPrediction(data) {
+  lastPrediction = data;
   const body = $("prediction-body");
   body.innerHTML = data.rows.map((row) => `
     <tr><td>${Number(row.vg).toFixed(3)}</td><td>${Number(row.vt).toFixed(3)}</td>
@@ -46,7 +48,9 @@ function renderPrediction(data) {
     const points = curve.vds.map((v, j) => `${x(v).toFixed(1)},${y(curve.id[j]).toFixed(1)}`).join(" L");
     return `<path d="M${points}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="2"/><text x="${width - 118}" y="${25 + i*18}" fill="${colors[i % colors.length]}">Vg=${Number(curve.vg).toFixed(2)} V</text>`;
   }).join("");
-  $("predictor-plot").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img"><line x1="${pad}" y1="${height-pad}" x2="${width-10}" y2="${height-pad}" stroke="#63758a"/><line x1="${pad}" y1="10" x2="${pad}" y2="${height-pad}" stroke="#63758a"/><text x="${width/2}" y="${height-8}" text-anchor="middle">|VDS| (V)</text><text x="12" y="${height/2}" transform="rotate(-90 12 ${height/2})" text-anchor="middle">|ID|</text>${paths}</svg>`;
+  const svg = `<svg viewBox="0 0 ${width} ${height}" role="img"><line x1="${pad}" y1="${height-pad}" x2="${width-10}" y2="${height-pad}" stroke="#63758a"/><line x1="${pad}" y1="10" x2="${pad}" y2="${height-pad}" stroke="#63758a"/><text x="${width/2}" y="${height-8}" text-anchor="middle">|VDS| (V)</text><text x="12" y="${height/2}" transform="rotate(-90 12 ${height/2})" text-anchor="middle">|ID|</text>${paths}</svg>`;
+  const target = $("curve-panel");
+  target.insertAdjacentHTML("beforeend", `<section class="curve-prediction"><h3>Vt / Idsat 預測：不同 Vg 的 Id–Vds 曲線</h3><p>錨點 Vg=${Number(data.anchor_vg).toFixed(3)} V · Vt=${Number(data.anchor_vt).toFixed(3)} V · Idsat=${Number(data.anchor_idsat).toFixed(4)} · k=${Number(data.k).toFixed(4)}</p>${svg}</section>`);
 }
 
 async function predict() {
@@ -70,6 +74,8 @@ function render(data) {
   syncControls(data);
   $("band-panel").innerHTML = data.band_svg;
   $("curve-panel").innerHTML = data.curve_svg;
+  if (data.state.device !== "MOSFET") lastPrediction = null;
+  if (lastPrediction && data.state.device === "MOSFET") renderPrediction(lastPrediction);
 }
 
 async function update(extra = {}) {

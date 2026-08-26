@@ -54,8 +54,10 @@ input[type="range"] { accent-color: var(--blue); display: block; margin: 10px 0 
 .prediction-table th:last-child, .prediction-table td:last-child { text-align: center; }
 .region-cutoff { color: var(--muted); font-weight: 700; }
 .region-saturation { color: var(--purple); font-weight: 700; }
-.predictor-plot { margin-top: 10px; overflow-x: auto; }
-.predictor-plot svg { background: #fbfdff; border: 1px solid var(--line); border-radius: 10px; min-width: 620px; width: 100%; }
+.curve-prediction { border-top: 1px solid var(--line); margin-top: 12px; padding: 12px 8px 8px; }
+.curve-prediction h3 { color: var(--ink); font-size: 15px; margin: 0 0 3px; }
+.curve-prediction p { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.curve-prediction svg { background: #fbfdff; border: 1px solid var(--line); border-radius: 10px; display: block; min-width: 620px; width: 100%; }
 .tabs { display: flex; gap: 8px; margin: 18px 0 10px; }
 .tab { background: transparent; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; font: inherit; font-weight: 700; padding: 8px 12px; }
 .tab.active { border-color: var(--blue); color: var(--blue); }
