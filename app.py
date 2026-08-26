@@ -29,6 +29,7 @@ class VoltageVisualizer(tk.Tk):
         self.predict_idsat = tk.DoubleVar(value=.50)
         self.predict_specified = tk.StringVar()
         self.predict_message = tk.StringVar(value="以目前 Vgs 為第一個預測點")
+        self.prediction_result = None
         self._applying_region_preset = False
         self._dragging_3d = False
         self.phase = 0.0
@@ -178,6 +179,7 @@ class VoltageVisualizer(tk.Tk):
             self.predictor_group.pack_forget()
             self.region_view.set("Follow voltage")
             self.vds.set(0.0)
+            self.prediction_result = None
         self._bulk_changed()
 
     def _run_prediction(self):
@@ -189,9 +191,11 @@ class VoltageVisualizer(tk.Tk):
             result = predict_mosfet_iv_sweep(self.bulk.get(), self.vg.get(), self.predict_vt.get(),
                                              self.predict_idsat.get(), self.predict_step.get(),
                                              self.predict_points.get(), specified_vgs=specified)
+            self.prediction_result = result
             rows = "; ".join(f"Vg={row['vg']:+.2f}, VDS,pinch-off={row['pinch_off_vds']:+.2f}, Idsat={row['idsat']:.3f}"
                              for row in result["rows"])
             self.predict_message.set(f"k={result['k']:.4f}; {rows}")
+            self._redraw(update_curves=True)
         except (tk.TclError, ValueError) as exc:
             self.predict_message.set(f"輸入錯誤：{exc}")
 
@@ -305,7 +309,23 @@ class VoltageVisualizer(tk.Tk):
         self.canvas.draw_idle()
         if update_curves:
             draw_curves(self.curve_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get())
+            if self.device.get() == "MOSFET" and self.prediction_result:
+                self._draw_prediction_curves()
             self.curve_canvas.draw_idle()
+
+    def _draw_prediction_curves(self):
+        """Overlay measured-anchor Vg sweep curves on the lower local I-V chart."""
+        if not self.curve_figure.axes:
+            return
+        axis = self.curve_figure.axes[0]
+        colors = ("#1877c9", "#762aa5", "#d84343", "#2e7d32", "#ef8a00", "#00838f")
+        for index, curve in enumerate(self.prediction_result["curves"]):
+            axis.plot(curve["vds"], curve["id"], lw=2.0, color=colors[index % len(colors)],
+                      label=f"pred Vgs={curve['vg']:+.3f} V")
+            axis.scatter([curve["pinch_off_vds"]], [curve["idsat"]], s=28,
+                         color=colors[index % len(colors)], zorder=6)
+        axis.set_title("MOSFET output I-V · measured-anchor Vg prediction", fontsize=13, weight="bold")
+        axis.legend(loc="best", fontsize=7, ncol=2)
 
     def _animate(self):
         self.phase = (self.phase + .07) % 1.0
