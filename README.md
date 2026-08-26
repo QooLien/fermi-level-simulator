@@ -7,6 +7,7 @@
 1. 安裝 Python 3.11 以上版本。
 2. 在此資料夾執行 `pip install -r requirements.txt`。
 3. Windows 可雙擊 `run_simulator.bat`，或執行 `python app.py`。
+4. 若要用手機遠端操作，可雙擊 `run_web.bat`，在同一 Wi‑Fi 的手機開啟 `http://電腦區域網路IP:5000`。
 
 ## 操作
 
@@ -24,7 +25,9 @@
 - [`docs/FORMULA_GUIDE.md`](docs/FORMULA_GUIDE.md) 集中整理 MOS capacitor 與 MOSFET 使用的完整數學式。
 - 元件剖面直接顯示介面載子、耗盡區、反轉層、通道與 pinch-off。
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
-- 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。
+- 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。MOSFET 另以紫色箭頭標示 conventional current：nMOS 的 \(I_D\) 為 Drain → Source，pMOS 的 \(|I_D|\) 為 Source → Drain。
+- 瀏覽器版提供手機觸控操作、MOSFET 區域預設、3D Elevation／Azimuth 視角與 I–V / C–V 分頁；服務預設監聽 `0.0.0.0:5000`，僅建議在可信任的區域網路中使用。
+- 瀏覽器版 MOSFET 另提供 Vt／Idsat 預測器：以目前單一 Vg 為錨點，按可調 step 與點數往截止方向掃描，或直接輸入指定 Vg 清單。使用 `VOV=max(|VGS|-|VT|,0)`、`IDSAT=1/2·k·VOV²`，其中 `|VT|=0.800 V`、`k=1` 是明確的 normalized 教學假設；單一 Vg 無法實際萃取物理 VT。
 
 ## 中文教材
 

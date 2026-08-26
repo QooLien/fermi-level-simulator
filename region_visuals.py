@@ -75,6 +75,55 @@ def mosfet_region_preset(bulk_type, region):
     return polarity*vgs, polarity*vds
 
 
+def predict_mosfet_vt_idsat(bulk_type, anchor_vg, step=0.1, points=5,
+                            specified_vgs=None, vt=NORMALIZED_VT, k=1.0):
+    """Predict lower gate-drive points with the normalized square-law model.
+
+    A single Vg cannot physically extract VT and k.  This teaching helper keeps
+    VT and k explicit, then sweeps the effective gate drive toward cutoff.  For
+    pMOS the signed voltages are mirrored, while the reported VT and VOV are
+    magnitudes so NMOS and pMOS can be compared directly.
+    """
+    if bulk_type not in ("P-type", "N-type"):
+        raise ValueError("bulk_type must be P-type or N-type")
+    step = float(step)
+    points = int(points)
+    vt = float(vt)
+    k = float(k)
+    if step <= 0:
+        raise ValueError("step must be positive")
+    if points < 2 or points > 12:
+        raise ValueError("points must be between 2 and 12")
+    if vt < 0 or k <= 0:
+        raise ValueError("vt must be non-negative and k must be positive")
+    polarity = 1.0 if bulk_type == "P-type" else -1.0
+    anchor_vg = float(anchor_vg)
+    if specified_vgs is None:
+        anchor_drive = max(polarity * anchor_vg, 0.0)
+        vgs = [polarity * max(anchor_drive - i * step, 0.0)
+               for i in range(points)]
+        source = "step"
+    else:
+        vgs = [float(value) for value in specified_vgs]
+        if not vgs:
+            raise ValueError("specified_vgs cannot be empty")
+        if len(vgs) > 12:
+            raise ValueError("specified_vgs cannot contain more than 12 values")
+        source = "specified"
+
+    rows = []
+    for vg in vgs:
+        drive = max(polarity * vg, 0.0)
+        overdrive = max(drive - vt, 0.0)
+        idsat = 0.5 * k * overdrive**2 if overdrive > 0 else 0.0
+        rows.append({"vg": float(vg), "gate_drive": float(drive),
+                     "vt": float(vt), "overdrive": float(overdrive),
+                     "idsat": float(idsat),
+                     "region": "Saturation" if overdrive > 0 else "Cutoff"})
+    return {"rows": rows, "source": source, "anchor_vg": anchor_vg,
+            "step": step, "points": len(rows), "vt": vt, "k": k}
+
+
 def _flow_dots(start, end, count, phase):
     t = (np.linspace(0, 1, count, endpoint=False) + phase) % 1.0
     return start + (end - start) * t
@@ -322,12 +371,18 @@ def _draw_mosfet(fig, region, phase, bulk_type, vgs, vds, view_elev, view_azim):
             carrier_x = np.sort(3.2 + 5.1*(1-np.linspace(0,1,15)**1.8))
         ax_device.add_patch(shape)
         _carrier(ax_device,carrier_x,4.55+.03*np.sin(carrier_x*3),carrier,46)
-        direction = 1 if effective_drain >= 0 else -1
-        moving = _flow_dots(3.25,8.72,7,phase) if direction>0 else _flow_dots(8.72,3.25,7,phase)
+        # The animated markers always show physical carrier transport through
+        # the channel: source → drain.  For nMOS, conventional current is the
+        # opposite direction because electrons carry negative charge.
+        moving = _flow_dots(3.25,8.72,7,phase)
         _carrier(ax_device,moving,4.67+.04*np.sin(moving*4),carrier,56)
-        start, end = ((3.3,8.7) if direction>0 else (8.7,3.3))
-        ax_device.annotate(f"{carrier} flow",xy=(end,4.05),xytext=(start,4.05),
+        ax_device.annotate(f"{carrier} flow",xy=(8.7,4.10),xytext=(3.3,4.10),
                            arrowprops=dict(arrowstyle="-|>",color=color,lw=2.3),color=color)
+        current_start, current_end = ((8.7,3.38),(3.3,3.38)) if p_bulk else ((3.3,3.38),(8.7,3.38))
+        current_label = r"conventional current $I_D$" if p_bulk else r"conventional current $|I_D|$"
+        ax_device.annotate(current_label,xy=current_end,xytext=current_start,
+                           arrowprops=dict(arrowstyle="-|>",color=PURPLE,lw=2.1),color=PURPLE,
+                           ha="right" if p_bulk else "left")
         if region == "Saturation":
             ax_device.annotate("pinch-off",xy=(8.42,4.5),xytext=(9.2,3.55),
                                arrowprops=dict(arrowstyle="->",color=PURPLE),color=PURPLE)

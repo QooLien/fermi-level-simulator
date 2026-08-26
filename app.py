@@ -6,7 +6,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from region_visuals import (draw_curves, draw_scene, mosfet_region_preset,
-                            operating_region)
+                            operating_region, predict_mosfet_vt_idsat)
 
 
 class VoltageVisualizer(tk.Tk):
@@ -23,6 +23,10 @@ class VoltageVisualizer(tk.Tk):
         self.region_view = tk.StringVar(value="Follow voltage")
         self.view_elev = tk.DoubleVar(value=24.0)
         self.view_azim = tk.DoubleVar(value=-61.0)
+        self.predict_step = tk.DoubleVar(value=.10)
+        self.predict_points = tk.IntVar(value=5)
+        self.predict_specified = tk.StringVar()
+        self.predict_message = tk.StringVar(value="以目前 Vgs 為第一個預測點")
         self._applying_region_preset = False
         self._dragging_3d = False
         self.phase = 0.0
@@ -120,6 +124,18 @@ class VoltageVisualizer(tk.Tk):
         ttk.Button(self.mosfet_view_group, text="Reset view", command=self._reset_3d_view).pack(side="left")
         self._update_view_labels()
 
+        self.predictor_group = ttk.LabelFrame(controls, text="MOSFET Vt / Idsat prediction", padding=(8, 5))
+        ttk.Label(self.predictor_group, text="step (V)").pack(side="left")
+        ttk.Spinbox(self.predictor_group, from_=.01, to=1, increment=.01,
+                    textvariable=self.predict_step, width=6, format="%.2f").pack(side="left", padx=(4, 10))
+        ttk.Label(self.predictor_group, text="points").pack(side="left")
+        ttk.Spinbox(self.predictor_group, from_=2, to=12, increment=1,
+                    textvariable=self.predict_points, width=4).pack(side="left", padx=(4, 10))
+        ttk.Label(self.predictor_group, text="指定 Vgs (逗號分隔)").pack(side="left")
+        ttk.Entry(self.predictor_group, textvariable=self.predict_specified, width=24).pack(side="left", padx=(4, 8))
+        ttk.Button(self.predictor_group, text="預測", command=self._run_prediction).pack(side="left")
+        ttk.Label(self.predictor_group, textvariable=self.predict_message, style="Hint.TLabel").pack(side="left", padx=(10, 0))
+
         tabs = ttk.Notebook(self)
         tabs.pack(fill="both", expand=True, padx=10)
         band_tab = ttk.Frame(tabs)
@@ -147,12 +163,29 @@ class VoltageVisualizer(tk.Tk):
         if self.device.get() == "MOSFET":
             self.vds_group.pack(side="left", padx=(22, 0))
             self.mosfet_view_group.pack(fill="x", pady=(5, 0))
+            self.predictor_group.pack(fill="x", pady=(5, 0))
         else:
             self.vds_group.pack_forget()
             self.mosfet_view_group.pack_forget()
+            self.predictor_group.pack_forget()
             self.region_view.set("Follow voltage")
             self.vds.set(0.0)
         self._bulk_changed()
+
+    def _run_prediction(self):
+        if self.device.get() != "MOSFET":
+            return
+        try:
+            raw = self.predict_specified.get().replace("，", ",")
+            specified = [float(item.strip()) for item in raw.split(",") if item.strip()] or None
+            result = predict_mosfet_vt_idsat(self.bulk.get(), self.vg.get(),
+                                             self.predict_step.get(), self.predict_points.get(),
+                                             specified_vgs=specified)
+            rows = "; ".join(f"Vg={row['vg']:+.2f} V, Vt={row['vt']:.2f} V, Vov={row['overdrive']:.2f} V, Idsat={row['idsat']:.3f} ({row['region']})"
+                             for row in result["rows"])
+            self.predict_message.set(rows)
+        except (tk.TclError, ValueError) as exc:
+            self.predict_message.set(f"輸入錯誤：{exc}")
 
     def _bulk_changed(self):
         if self.device.get() == "MOSFET":

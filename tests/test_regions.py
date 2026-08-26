@@ -5,7 +5,7 @@ from matplotlib.figure import Figure
 from region_visuals import (NORMALIZED_PHI_F, NORMALIZED_VT, REGIONS,
                             draw_curves, draw_scene, moscap_operating_point,
                             mosfet_operating_point, mosfet_region_preset,
-                            operating_region)
+                            operating_region, predict_mosfet_vt_idsat)
 
 
 class RegionSceneTests(unittest.TestCase):
@@ -65,6 +65,30 @@ class RegionSceneTests(unittest.TestCase):
         self.assertEqual(axis.name, "3d")
         self.assertAlmostEqual(axis.elev, 42)
         self.assertAlmostEqual(axis.azim, 115)
+
+    def test_mosfet_carrier_and_conventional_current_directions(self):
+        cases = (("P-type", 1.8, .3, "electron flow", r"conventional current $I_D$", -1),
+                 ("N-type", -1.8, -.3, "hole flow", r"conventional current $|I_D|$", 1))
+        for bulk, vgs, vds, carrier_label, current_label, current_sign in cases:
+            figure = Figure(figsize=(8, 4))
+            draw_scene(figure, "MOSFET", bulk_type=bulk, vg=vgs, vds=vds)
+            annotations = {text.get_text(): text for text in figure.axes[0].texts}
+            carrier_arrow = annotations[carrier_label]
+            current_arrow = annotations[current_label]
+            self.assertGreater(carrier_arrow.xy[0], carrier_arrow.get_position()[0])
+            self.assertEqual((current_arrow.xy[0] > current_arrow.get_position()[0]) -
+                             (current_arrow.xy[0] < current_arrow.get_position()[0]), current_sign)
+
+    def test_vt_idsat_prediction_sweeps_toward_cutoff_and_mirrors_pmos(self):
+        result = predict_mosfet_vt_idsat("P-type", 1.8, step=.2, points=5)
+        self.assertEqual([round(row["vg"], 1) for row in result["rows"]], [1.8, 1.6, 1.4, 1.2, 1.0])
+        self.assertEqual([row["region"] for row in result["rows"]],
+                         ["Saturation", "Saturation", "Saturation", "Saturation", "Saturation"])
+        self.assertGreater(result["rows"][0]["idsat"], result["rows"][-1]["idsat"])
+        pmos = predict_mosfet_vt_idsat("N-type", -1.8, step=.2, points=2)
+        self.assertEqual([round(row["vg"], 1) for row in pmos["rows"]], [-1.8, -1.6])
+        specified = predict_mosfet_vt_idsat("P-type", 1.0, specified_vgs=[1.0, .8, .6])
+        self.assertEqual([row["region"] for row in specified["rows"]], ["Saturation", "Cutoff", "Cutoff"])
 
     def test_electrical_curves_render_for_both_bulk_types(self):
         for device, bulk, vg, vds in (("MOS Capacitor", "P-type", 1.2, 0),
