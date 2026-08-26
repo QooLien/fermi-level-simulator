@@ -151,6 +151,8 @@ class VoltageVisualizer(tk.Tk):
         curve_tab = ttk.Frame(tabs)
         tabs.add(band_tab, text="Band & interface carriers")
         tabs.add(curve_tab, text="I-V / C-V curves")
+        prediction_tab = ttk.Frame(tabs)
+        tabs.add(prediction_tab, text="Prediction")
         self.figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.canvas = FigureCanvasTkAgg(self.figure, master=band_tab)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -171,6 +173,11 @@ class VoltageVisualizer(tk.Tk):
         self.cv_canvas = FigureCanvasTkAgg(self.cv_figure, master=cv_frame)
         self.cv_canvas.get_tk_widget().pack(fill="both", expand=True)
         NavigationToolbar2Tk(self.cv_canvas, cv_frame, pack_toolbar=True).update()
+        self.prediction_figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
+        self.prediction_canvas = FigureCanvasTkAgg(self.prediction_figure, master=prediction_tab)
+        self.prediction_canvas.get_tk_widget().pack(fill="both", expand=True)
+        NavigationToolbar2Tk(self.prediction_canvas, prediction_tab, pack_toolbar=True).update()
+        self._draw_prediction_curves()
 
         footer = ttk.Frame(self, padding=(16, 3, 16, 8))
         footer.pack(fill="x")
@@ -322,19 +329,22 @@ class VoltageVisualizer(tk.Tk):
         if update_curves:
             draw_curves(self.iv_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get(), plot="iv")
             draw_curves(self.cv_figure, self.device.get(), self.bulk.get(), self.vg.get(), self.vds.get(), plot="cv")
-            if self.device.get() == "MOSFET" and self.prediction_result:
-                self._draw_prediction_curves()
+            self._draw_prediction_curves()
             self.iv_canvas.draw_idle()
             self.cv_canvas.draw_idle()
+            self.prediction_canvas.draw_idle()
 
     def _draw_prediction_curves(self):
-        """Overlay measured-anchor Vg sweep curves on the lower local I-V chart."""
-        if not self.iv_figure.axes:
+        """Render measured-anchor Vg sweep curves in the dedicated tab."""
+        self.prediction_figure.clear()
+        axis = self.prediction_figure.add_subplot(111)
+        if not self.prediction_result:
+            axis.text(.5, .5, "尚未產生 prediction\n請輸入 Vt / Idsat 後按下預測",
+                      ha="center", va="center", fontsize=14, color="#63758a",
+                      transform=axis.transAxes)
+            axis.set_axis_off()
             return
-        axis = self.iv_figure.axes[0]
-        # Prediction mode replaces the baseline output plot entirely: no
-        # three faint reference curves, selected-bias marker, or right legend.
-        axis.clear()
+        # Prediction mode is a clean chart: no baseline teaching curves.
         axis.set_xlabel("Drain voltage Vds (V)")
         axis.set_ylabel("Normalized drain current Id")
         axis.set_xlim(-3, 3)
