@@ -345,18 +345,23 @@ class VoltageVisualizer(tk.Tk):
             axis.set_axis_off()
             return
         # Prediction mode is a clean chart: no baseline teaching curves.
-        axis.set_xlabel("Drain voltage Vds (V)")
-        axis.set_ylabel("Normalized drain current Id")
-        axis.set_xlim(-3, 3)
+        axis.set_xlabel("|VDS| (V)")
+        axis.set_ylabel("|ID| (normalized)")
+        axis.set_xlim(0, 3)
+        max_id = max((abs(curve["idsat"]) for curve in self.prediction_result["curves"]), default=1.0)
+        axis.set_ylim(0, max(max_id * 1.15, .01))
         axis.grid(alpha=.18)
         axis.spines[["top", "right"]].set_visible(False)
         colors = ("#1877c9", "#762aa5", "#d84343", "#2e7d32", "#ef8a00", "#00838f")
         for index, curve in enumerate(self.prediction_result["curves"]):
             color = colors[index % len(colors)]
-            axis.plot(curve["vds"], curve["id"], lw=2.0, color=color,
+            # Prediction is shown as magnitude so both nMOS and pMOS start
+            # from the physical origin (0, 0).
+            axis.plot([abs(value) for value in curve["vds"]],
+                      [abs(value) for value in curve["id"]], lw=2.0, color=color,
                       label=f"pred Vgs={curve['vg']:+.3f} V")
-            pinch_vds = curve["pinch_off_vds"]
-            idsat = curve["idsat"]
+            pinch_vds = abs(curve["pinch_off_vds"])
+            idsat = abs(curve["idsat"])
             axis.scatter([pinch_vds], [idsat], s=30, color=color, zorder=6)
             axis.annotate(
                 f"Vg={curve['vg']:+.3f} V\nIdsat={idsat:.4f}",
