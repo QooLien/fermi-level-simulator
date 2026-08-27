@@ -28,7 +28,7 @@ class VoltageVisualizer(tk.Tk):
         self.predict_vt = tk.DoubleVar(value=.80)
         self.predict_idsat = tk.DoubleVar(value=.50)
         self.predict_specified = tk.StringVar()
-        self.predict_message = tk.StringVar(value="以目前 Vgs 為第一個預測點")
+        self.predict_message = tk.StringVar(value="Enter anchor Vt and Idsat, then click Predict.")
         self.prediction_result = None
         self._applying_region_preset = False
         self._dragging_3d = False
@@ -127,22 +127,22 @@ class VoltageVisualizer(tk.Tk):
         ttk.Button(self.mosfet_view_group, text="Reset view", command=self._reset_3d_view).pack(side="left")
         self._update_view_labels()
 
-        self.predictor_group = ttk.LabelFrame(controls, text="MOSFET Vt / Idsat prediction", padding=(8, 5))
-        ttk.Label(self.predictor_group, text="錨點 Vt").pack(side="left")
+        self.predictor_group = ttk.LabelFrame(controls, text="MOSFET Vt / Idsat Prediction", padding=(8, 5))
+        ttk.Label(self.predictor_group, text="Anchor Vt").pack(side="left")
         ttk.Spinbox(self.predictor_group, from_=0, to=3, increment=.01,
                     textvariable=self.predict_vt, width=6, format="%.2f").pack(side="left", padx=(4, 8))
-        ttk.Label(self.predictor_group, text="錨點 Idsat").pack(side="left")
+        ttk.Label(self.predictor_group, text="Anchor Idsat").pack(side="left")
         ttk.Spinbox(self.predictor_group, from_=0.001, to=100, increment=.01,
                     textvariable=self.predict_idsat, width=7, format="%.3f").pack(side="left", padx=(4, 8))
-        ttk.Label(self.predictor_group, text="step (V)").pack(side="left")
+        ttk.Label(self.predictor_group, text="Vg step (V)").pack(side="left")
         ttk.Spinbox(self.predictor_group, from_=.01, to=1, increment=.01,
                     textvariable=self.predict_step, width=6, format="%.2f").pack(side="left", padx=(4, 10))
-        ttk.Label(self.predictor_group, text="points").pack(side="left")
+        ttk.Label(self.predictor_group, text="Points").pack(side="left")
         ttk.Spinbox(self.predictor_group, from_=2, to=12, increment=1,
                     textvariable=self.predict_points, width=4).pack(side="left", padx=(4, 10))
-        ttk.Label(self.predictor_group, text="指定 Vgs (逗號分隔)").pack(side="left")
+        ttk.Label(self.predictor_group, text="Specified Vgs (comma-separated)").pack(side="left")
         ttk.Entry(self.predictor_group, textvariable=self.predict_specified, width=24).pack(side="left", padx=(4, 8))
-        ttk.Button(self.predictor_group, text="預測", command=self._run_prediction).pack(side="left")
+        ttk.Button(self.predictor_group, text="Predict", command=self._run_prediction).pack(side="left")
         ttk.Label(self.predictor_group, textvariable=self.predict_message, style="Hint.TLabel").pack(side="left", padx=(10, 0))
 
         tabs = ttk.Notebook(self)
@@ -216,7 +216,7 @@ class VoltageVisualizer(tk.Tk):
             self.predict_message.set(f"k={result['k']:.4f}; {rows}")
             self._redraw(update_curves=True)
         except (tk.TclError, ValueError) as exc:
-            self.predict_message.set(f"輸入錯誤：{exc}")
+            self.predict_message.set(f"Input error: {exc}")
 
     def _bulk_changed(self):
         if self.device.get() == "MOSFET":
@@ -339,7 +339,7 @@ class VoltageVisualizer(tk.Tk):
         self.prediction_figure.clear()
         axis = self.prediction_figure.add_subplot(111)
         if not self.prediction_result:
-            axis.text(.5, .5, "尚未產生 prediction\n請輸入 Vt / Idsat 後按下預測",
+            axis.text(.5, .5, "No prediction data yet\nEnter anchor Vt and Idsat, then click Predict",
                       ha="center", va="center", fontsize=14, color="#63758a",
                       transform=axis.transAxes)
             axis.set_axis_off()
