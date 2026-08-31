@@ -26,6 +26,7 @@
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
 - 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。MOSFET 另以紫色箭頭標示 conventional current：nMOS 的 \(I_D\) 為 Drain → Source，pMOS 的 \(|I_D|\) 為 Source → Drain。
 - MOSFET Vt／Idsat 預測器：手動輸入一組 pinch-off 錨點 `Vg、Vt、Idsat`，由 `k=2·Idsat/VOV²` 反推，再按可調 step 與點數往截止方向掃描，或直接輸入指定 Vg 清單。每個 Vg 都輸出 `VDS,pinch-off=VOV`、`Idsat`，並疊加在本機下方的 `Id–Vds` 圖表。
+- Prediction 可用 `Load XLSX` 匯入量測檔；只讀取名稱符合 `數字v`（例如 `0.90v`）且第一列包含 `Lot/Wafer`、`Chip ID` 與 PUL/PUR/PGL/PGR/PDL/PDR 的 Vt/Idsat 欄位。選擇 voltage sheet、chip row 與 cell 後，該分頁電壓作為錨點 Vg，Vt 固定，Idsat 依平方律換算到預測 Vg。
 
 ## 中文教材
 

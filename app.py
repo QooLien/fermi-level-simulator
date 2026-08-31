@@ -1,12 +1,46 @@
 """Voltage-driven gate/oxide/silicon band, I-V, and C-V visualizer."""
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
+import re
+from openpyxl import load_workbook
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
 from region_visuals import (draw_curves, draw_scene, mosfet_region_preset,
                             operating_region, predict_mosfet_iv_sweep)
+
+
+MEASUREMENT_DEVICES = ("PUL", "PUR", "PGL", "PGR", "PDL", "PDR")
+
+
+def load_voltage_measurements(path):
+    """Read voltage-named sheets whose first row contains measurement headers."""
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    datasets = {}
+    for sheet in workbook.worksheets:
+        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?v", sheet.title.strip(), re.IGNORECASE):
+            continue
+        values = sheet.iter_rows(values_only=True)
+        headers = [str(value).strip() if value is not None else "" for value in next(values, ())]
+        index = {header: position for position, header in enumerate(headers) if header}
+        required = {"Lot/Wafer", "Chip ID"}
+        required.update(f"{device} {field}" for device in MEASUREMENT_DEVICES for field in ("Vt", "Idsat"))
+        if not required.issubset(index):
+            continue
+        rows = []
+        for row_number, row in enumerate(values, start=2):
+            if not any(value is not None for value in row):
+                continue
+            record = {header: row[position] if position < len(row) else None
+                      for header, position in index.items()}
+            record["_excel_row"] = row_number
+            rows.append(record)
+        datasets[sheet.title] = {"voltage": float(sheet.title[:-1]), "headers": headers, "rows": rows}
+    workbook.close()
+    if not datasets:
+        raise ValueError("No voltage-named sheet with the required Vt/Idsat headers was found")
+    return datasets
 
 
 class VoltageVisualizer(tk.Tk):
@@ -30,6 +64,11 @@ class VoltageVisualizer(tk.Tk):
         self.predict_specified = tk.StringVar()
         self.predict_message = tk.StringVar(value="Enter anchor Vt and Idsat, then click Predict.")
         self.prediction_result = None
+        self.predict_anchor_vg = None
+        self.measurements = {}
+        self.measurement_sheet = tk.StringVar()
+        self.measurement_device = tk.StringVar(value="PUL")
+        self.measurement_row = tk.StringVar()
         self._applying_region_preset = False
         self._dragging_3d = False
         self.phase = 0.0
@@ -144,6 +183,24 @@ class VoltageVisualizer(tk.Tk):
         ttk.Entry(self.predictor_group, textvariable=self.predict_specified, width=24).pack(side="left", padx=(4, 8))
         ttk.Button(self.predictor_group, text="Predict", command=self._run_prediction).pack(side="left")
         ttk.Label(self.predictor_group, textvariable=self.predict_message, style="Hint.TLabel").pack(side="left", padx=(10, 0))
+        data_group = ttk.LabelFrame(controls, text="Measured XLSX anchor", padding=(8, 5))
+        data_group.pack(fill="x", pady=(5, 0))
+        ttk.Button(data_group, text="Load XLSX", command=self._load_measurements).pack(side="left")
+        ttk.Label(data_group, text="Voltage sheet").pack(side="left", padx=(10, 3))
+        self.measurement_sheet_box = ttk.Combobox(data_group, textvariable=self.measurement_sheet,
+                                                  state="readonly", width=9)
+        self.measurement_sheet_box.pack(side="left")
+        self.measurement_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
+        ttk.Label(data_group, text="Chip row").pack(side="left", padx=(10, 3))
+        self.measurement_row_box = ttk.Combobox(data_group, textvariable=self.measurement_row,
+                                                state="readonly", width=18)
+        self.measurement_row_box.pack(side="left")
+        self.measurement_row_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
+        ttk.Label(data_group, text="Cell").pack(side="left", padx=(10, 3))
+        self.measurement_device_box = ttk.Combobox(data_group, textvariable=self.measurement_device,
+                                                   state="readonly", width=7, values=MEASUREMENT_DEVICES)
+        self.measurement_device_box.pack(side="left")
+        self.measurement_device_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
 
         tabs = ttk.Notebook(self)
         tabs.pack(fill="both", expand=True, padx=10)
@@ -199,6 +256,53 @@ class VoltageVisualizer(tk.Tk):
             self.prediction_result = None
         self._bulk_changed()
 
+    def _load_measurements(self):
+        path = filedialog.askopenfilename(title="Select measurement workbook",
+                                          filetypes=(("Excel workbook", "*.xlsx"), ("All files", "*.*")))
+        if not path:
+            return
+        try:
+            self.measurements = load_voltage_measurements(path)
+            sheets = list(self.measurements)
+            self.measurement_sheet_box.configure(values=sheets)
+            self.measurement_sheet.set(sheets[0])
+            self._measurement_sheet_changed()
+            self.predict_message.set(f"Loaded {len(sheets)} voltage sheet(s) from {path}")
+        except (OSError, ValueError, KeyError) as exc:
+            messagebox.showerror("Measurement import", str(exc))
+
+    def _measurement_sheet_changed(self):
+        dataset = self.measurements.get(self.measurement_sheet.get())
+        if not dataset:
+            return
+        choices = [f"Excel row {row['_excel_row']} · {row.get('Chip ID', '')}" for row in dataset["rows"]]
+        self.measurement_row_box.configure(values=choices)
+        if choices:
+            self.measurement_row.set(choices[0])
+        self._measurement_selection_changed()
+
+    def _measurement_selection_changed(self):
+        dataset = self.measurements.get(self.measurement_sheet.get())
+        if not dataset or not self.measurement_row.get():
+            return
+        match = re.search(r"Excel row (\d+)", self.measurement_row.get())
+        if not match:
+            return
+        record = next((row for row in dataset["rows"] if row["_excel_row"] == int(match.group(1))), None)
+        if not record:
+            return
+        device = self.measurement_device.get()
+        try:
+            self.predict_vt.set(float(record[f"{device} Vt"]))
+            self.predict_idsat.set(float(record[f"{device} Idsat"]))
+            polarity = 1.0 if self.bulk.get() == "P-type" else -1.0
+            self.predict_anchor_vg = polarity * dataset["voltage"]
+            self.vg.set(self.predict_anchor_vg)
+            self._voltage_changed()
+            self.predict_message.set(f"Anchor loaded: {device} · Vg={self.vg.get():+.3f} V · Vt={self.predict_vt.get():.4f} V · Idsat={self.predict_idsat.get():.4f}")
+        except (TypeError, ValueError):
+            self.predict_message.set("Selected cell has no numeric Vt/Idsat")
+
     def _run_prediction(self):
         if self.device.get() != "MOSFET":
             return
@@ -207,7 +311,8 @@ class VoltageVisualizer(tk.Tk):
             specified = [float(item.strip()) for item in raw.split(",") if item.strip()] or None
             if specified is not None and not any(abs(value - self.vg.get()) < 1e-9 for value in specified):
                 specified.insert(0, self.vg.get())
-            result = predict_mosfet_iv_sweep(self.bulk.get(), self.vg.get(), self.predict_vt.get(),
+            anchor_vg = self.predict_anchor_vg if self.predict_anchor_vg is not None else self.vg.get()
+            result = predict_mosfet_iv_sweep(self.bulk.get(), anchor_vg, self.predict_vt.get(),
                                              self.predict_idsat.get(), self.predict_step.get(),
                                              self.predict_points.get(), specified_vgs=specified)
             self.prediction_result = result
