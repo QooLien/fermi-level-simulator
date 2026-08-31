@@ -43,6 +43,49 @@ def load_voltage_measurements(path):
     return datasets
 
 
+def convert_voltage_sheet(path, sheet_name, target_voltage, output_path):
+    """Copy one voltage sheet and rescale all six Idsat columns for target Vg."""
+    workbook = load_workbook(path)
+    if sheet_name not in workbook.sheetnames:
+        raise ValueError(f"Sheet not found: {sheet_name}")
+    source = workbook[sheet_name]
+    headers = [str(source.cell(1, column).value).strip() if source.cell(1, column).value is not None else ""
+               for column in range(1, source.max_column + 1)]
+    index = {header: position + 1 for position, header in enumerate(headers) if header}
+    required = {"Lot/Wafer", "Chip ID"}
+    required.update(f"{device} {field}" for device in MEASUREMENT_DEVICES for field in ("Vt", "Idsat"))
+    if not required.issubset(index):
+        raise ValueError("Selected sheet is missing the required Vt/Idsat headers")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)v", sheet_name.strip(), re.IGNORECASE)
+    if not match:
+        raise ValueError("Selected sheet name must contain an anchor voltage such as 0.90v")
+    anchor_voltage = float(match.group(1))
+    target_voltage = abs(float(target_voltage))
+    if target_voltage < 0:
+        raise ValueError("Target voltage must be non-negative")
+    target_name = f"{target_voltage:.2f}v"
+    if target_name in workbook.sheetnames:
+        del workbook[target_name]
+    target = workbook.copy_worksheet(source)
+    target.title = target_name
+    for row in range(2, target.max_row + 1):
+        for device in MEASUREMENT_DEVICES:
+            vt_cell = target.cell(row, index[f"{device} Vt"])
+            idsat_cell = target.cell(row, index[f"{device} Idsat"])
+            try:
+                vt = float(vt_cell.value)
+                idsat = float(idsat_cell.value)
+                anchor_overdrive = max(anchor_voltage - vt, 0.0)
+                target_overdrive = max(target_voltage - vt, 0.0)
+                idsat_cell.value = (idsat * (target_overdrive / anchor_overdrive) ** 2
+                                    if anchor_overdrive > 0 else 0.0)
+            except (TypeError, ValueError):
+                raise ValueError(f"Invalid numeric Vt/Idsat at row {row}, {device}")
+    workbook.save(output_path)
+    workbook.close()
+    return target_name
+
+
 class VoltageVisualizer(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -69,6 +112,8 @@ class VoltageVisualizer(tk.Tk):
         self.measurement_sheet = tk.StringVar()
         self.measurement_device = tk.StringVar(value="PUL")
         self.measurement_row = tk.StringVar()
+        self.measurement_path = None
+        self.output_voltage = tk.DoubleVar(value=0.8)
         self._applying_region_preset = False
         self._dragging_3d = False
         self.phase = 0.0
@@ -183,25 +228,6 @@ class VoltageVisualizer(tk.Tk):
         ttk.Entry(self.predictor_group, textvariable=self.predict_specified, width=24).pack(side="left", padx=(4, 8))
         ttk.Button(self.predictor_group, text="Predict", command=self._run_prediction).pack(side="left")
         ttk.Label(self.predictor_group, textvariable=self.predict_message, style="Hint.TLabel").pack(side="left", padx=(10, 0))
-        data_group = ttk.LabelFrame(controls, text="Measured XLSX anchor", padding=(8, 5))
-        data_group.pack(fill="x", pady=(5, 0))
-        ttk.Button(data_group, text="Load XLSX", command=self._load_measurements).pack(side="left")
-        ttk.Label(data_group, text="Voltage sheet").pack(side="left", padx=(10, 3))
-        self.measurement_sheet_box = ttk.Combobox(data_group, textvariable=self.measurement_sheet,
-                                                  state="readonly", width=9)
-        self.measurement_sheet_box.pack(side="left")
-        self.measurement_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
-        ttk.Label(data_group, text="Chip row").pack(side="left", padx=(10, 3))
-        self.measurement_row_box = ttk.Combobox(data_group, textvariable=self.measurement_row,
-                                                state="readonly", width=18)
-        self.measurement_row_box.pack(side="left")
-        self.measurement_row_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
-        ttk.Label(data_group, text="Cell").pack(side="left", padx=(10, 3))
-        self.measurement_device_box = ttk.Combobox(data_group, textvariable=self.measurement_device,
-                                                   state="readonly", width=7, values=MEASUREMENT_DEVICES)
-        self.measurement_device_box.pack(side="left")
-        self.measurement_device_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_selection_changed())
-
         tabs = ttk.Notebook(self)
         tabs.pack(fill="both", expand=True, padx=10)
         band_tab = ttk.Frame(tabs)
@@ -210,6 +236,18 @@ class VoltageVisualizer(tk.Tk):
         tabs.add(curve_tab, text="I-V / C-V curves")
         prediction_tab = ttk.Frame(tabs)
         tabs.add(prediction_tab, text="Prediction")
+        data_group = ttk.LabelFrame(prediction_tab, text="Measured Excel source · convert all rows", padding=(8, 5))
+        data_group.pack(fill="x", padx=8, pady=(8, 2))
+        ttk.Button(data_group, text="Load Excel", command=self._load_measurements).pack(side="left")
+        ttk.Label(data_group, text="Voltage sheet").pack(side="left", padx=(10, 3))
+        self.measurement_sheet_box = ttk.Combobox(data_group, textvariable=self.measurement_sheet, state="readonly", width=9)
+        self.measurement_sheet_box.pack(side="left")
+        self.measurement_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._measurement_sheet_changed())
+        ttk.Label(data_group, text="Output Vg (V)").pack(side="left", padx=(10, 3))
+        ttk.Spinbox(data_group, from_=0, to=3, increment=.01, textvariable=self.output_voltage, width=7, format="%.3f").pack(side="left")
+        ttk.Button(data_group, text="Convert all rows and save", command=self._convert_all_rows).pack(side="left", padx=(10, 0))
+        self.measurement_status = tk.StringVar(value="Load an Excel workbook; the selected voltage sheet will be copied and all six Idsat columns recalculated.")
+        ttk.Label(prediction_tab, textvariable=self.measurement_status, style="Hint.TLabel").pack(anchor="w", padx=12, pady=(0, 3))
         self.figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.canvas = FigureCanvasTkAgg(self.figure, master=band_tab)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -262,12 +300,13 @@ class VoltageVisualizer(tk.Tk):
         if not path:
             return
         try:
+            self.measurement_path = path
             self.measurements = load_voltage_measurements(path)
             sheets = list(self.measurements)
             self.measurement_sheet_box.configure(values=sheets)
             self.measurement_sheet.set(sheets[0])
             self._measurement_sheet_changed()
-            self.predict_message.set(f"Loaded {len(sheets)} voltage sheet(s) from {path}")
+            self.measurement_status.set(f"Loaded {len(sheets)} voltage sheet(s). All rows will be converted on save.")
         except (OSError, ValueError, KeyError) as exc:
             messagebox.showerror("Measurement import", str(exc))
 
@@ -275,33 +314,31 @@ class VoltageVisualizer(tk.Tk):
         dataset = self.measurements.get(self.measurement_sheet.get())
         if not dataset:
             return
-        choices = [f"Excel row {row['_excel_row']} · {row.get('Chip ID', '')}" for row in dataset["rows"]]
-        self.measurement_row_box.configure(values=choices)
-        if choices:
-            self.measurement_row.set(choices[0])
-        self._measurement_selection_changed()
+        self.output_voltage.set(dataset["voltage"])
+        if dataset["rows"]:
+            first = dataset["rows"][0]
+            self.predict_vt.set(float(first["PUL Vt"]))
+            self.predict_idsat.set(float(first["PUL Idsat"]))
+        self.measurement_status.set(f"Source: {self.measurement_sheet.get()} · {len(dataset['rows'])} rows · Vt stays fixed; six Idsat columns are recalculated.")
 
     def _measurement_selection_changed(self):
-        dataset = self.measurements.get(self.measurement_sheet.get())
-        if not dataset or not self.measurement_row.get():
+        self._measurement_sheet_changed()
+
+    def _convert_all_rows(self):
+        if not self.measurement_path or not self.measurement_sheet.get():
+            messagebox.showwarning("Measurement export", "Load an Excel workbook and select a voltage sheet first.")
             return
-        match = re.search(r"Excel row (\d+)", self.measurement_row.get())
-        if not match:
+        output_path = filedialog.asksaveasfilename(title="Save converted workbook", defaultextension=".xlsx",
+                                                   filetypes=(("Excel workbook", "*.xlsx"), ("All files", "*.*")))
+        if not output_path:
             return
-        record = next((row for row in dataset["rows"] if row["_excel_row"] == int(match.group(1))), None)
-        if not record:
-            return
-        device = self.measurement_device.get()
         try:
-            self.predict_vt.set(float(record[f"{device} Vt"]))
-            self.predict_idsat.set(float(record[f"{device} Idsat"]))
-            polarity = 1.0 if self.bulk.get() == "P-type" else -1.0
-            self.predict_anchor_vg = polarity * dataset["voltage"]
-            self.vg.set(self.predict_anchor_vg)
-            self._voltage_changed()
-            self.predict_message.set(f"Anchor loaded: {device} · Vg={self.vg.get():+.3f} V · Vt={self.predict_vt.get():.4f} V · Idsat={self.predict_idsat.get():.4f}")
-        except (TypeError, ValueError):
-            self.predict_message.set("Selected cell has no numeric Vt/Idsat")
+            target_name = convert_voltage_sheet(self.measurement_path, self.measurement_sheet.get(),
+                                                self.output_voltage.get(), output_path)
+            self.measurement_status.set(f"Saved {target_name}: all rows converted; only six Idsat columns changed.")
+            messagebox.showinfo("Measurement export", f"Saved converted sheet {target_name} to:\n{output_path}")
+        except (OSError, ValueError, KeyError) as exc:
+            messagebox.showerror("Measurement export", str(exc))
 
     def _run_prediction(self):
         if self.device.get() != "MOSFET":
