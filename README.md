@@ -26,7 +26,7 @@
 - MOSFET 以 3D Ec／Ei／Ev 能帶面呈現 source、gate/channel、drain 的空間能障，並加入 EFn／EFp。
 - 動畫圓點與箭頭顯示電子／電洞淨流向；實心藍點為電子，紅色空心點為電洞。MOSFET 另以紫色箭頭標示 conventional current：nMOS 的 \(I_D\) 為 Drain → Source，pMOS 的 \(|I_D|\) 為 Source → Drain。
 - MOSFET Vt／Idsat 預測器：手動輸入一組 pinch-off 錨點 `Vg、Vt、Idsat`，由 `k=2·Idsat/VOV²` 反推，再按可調 step 與點數往截止方向掃描，或直接輸入指定 Vg 清單。每個 Vg 都輸出 `VDS,pinch-off=VOV`、`Idsat`，並疊加在本機下方的 `Id–Vds` 圖表。
-- Prediction 可用 `Load Excel` 匯入量測檔；選擇 voltage sheet 後，可在 `Output Vg list` 輸入 `0.8v,0.7v,0.6v`。程式一次轉換全部 chip rows，保留原始工作表並為每個輸出電壓建立分頁；`Lot/Wafer`、`Chip ID` 與六組 Vt 不變，只依平方律重算六組 Idsat，Prediction 圖同步顯示各電壓 I–V 曲線與 pinch-off Idsat。
+- Prediction 可用 `Load Excel` 匯入量測檔；選擇 voltage sheet 後，可在 `Output Vg list` 輸入 `0.8v,0.7v,0.6v`。程式一次轉換全部 chip rows，保留原始工作表並為每個輸出電壓建立分頁；`Lot/Wafer`、`Chip ID` 與六組 Vt 不變，只依平方律重算六組 Idsat。完成後可選擇 Lot/Chip 與 PUL、PUR、PGL、PGR、PDL、PDR，直接在同一分頁快速瀏覽 anchor 與各目標 Vgs 的多條 I–V 曲線及 pinch-off Idsat，並可用 `Export chart` 輸出 PNG、PDF 或 SVG。
 
 ## 中文教材
 

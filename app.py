@@ -109,6 +109,22 @@ def convert_voltage_sheets(path, sheet_name, target_voltages, output_path):
     return created
 
 
+def predict_measurement_record(dataset, record, device, target_voltages):
+    """Build an I-V sweep for one measured SRAM transistor across Vgs values."""
+    if device not in MEASUREMENT_DEVICES:
+        raise ValueError(f"Unknown SRAM cell transistor: {device}")
+    anchor_voltage = abs(float(dataset["voltage"]))
+    vt = float(record[f"{device} Vt"])
+    idsat = float(record[f"{device} Idsat"])
+    voltages = [anchor_voltage]
+    for voltage in target_voltages:
+        voltage = abs(float(voltage))
+        if not any(abs(voltage - existing) < 1e-12 for existing in voltages):
+            voltages.append(voltage)
+    return predict_mosfet_iv_sweep("P-type", anchor_voltage, vt, idsat,
+                                   specified_vgs=voltages)
+
+
 class VoltageVisualizer(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -137,6 +153,7 @@ class VoltageVisualizer(tk.Tk):
         self.measurement_row = tk.StringVar()
         self.measurement_path = None
         self.output_voltages = tk.StringVar(value="0.8v,0.7v,0.6v")
+        self.prediction_context = None
         self._applying_region_preset = False
         self._dragging_3d = False
         self.phase = 0.0
@@ -259,7 +276,7 @@ class VoltageVisualizer(tk.Tk):
         tabs.add(curve_tab, text="I-V / C-V curves")
         prediction_tab = ttk.Frame(tabs)
         tabs.add(prediction_tab, text="Prediction")
-        data_group = ttk.LabelFrame(prediction_tab, text="Measured Excel source · convert all rows", padding=(8, 5))
+        data_group = ttk.LabelFrame(prediction_tab, text="Measured Excel source - convert all rows", padding=(8, 5))
         data_group.pack(fill="x", padx=8, pady=(8, 2))
         ttk.Button(data_group, text="Load Excel", command=self._load_measurements).pack(side="left")
         ttk.Label(data_group, text="Voltage sheet").pack(side="left", padx=(10, 3))
@@ -271,6 +288,25 @@ class VoltageVisualizer(tk.Tk):
         ttk.Button(data_group, text="Convert all rows and save", command=self._convert_all_rows).pack(side="left", padx=(10, 0))
         self.measurement_status = tk.StringVar(value="Load an Excel workbook; the selected voltage sheet will be copied and all six Idsat columns recalculated.")
         ttk.Label(prediction_tab, textvariable=self.measurement_status, style="Hint.TLabel").pack(anchor="w", padx=12, pady=(0, 3))
+        preview_group = ttk.LabelFrame(prediction_tab, text="Quick I-V preview - selected Chip", padding=(8, 5))
+        preview_group.pack(fill="x", padx=8, pady=(2, 4))
+        ttk.Label(preview_group, text="Chip").pack(side="left")
+        self.measurement_row_box = ttk.Combobox(preview_group, textvariable=self.measurement_row,
+                                                state="readonly", width=34)
+        self.measurement_row_box.pack(side="left", padx=(4, 12))
+        self.measurement_row_box.bind("<<ComboboxSelected>>", lambda _e: self._preview_measurement_chip())
+        ttk.Label(preview_group, text="SRAM transistor").pack(side="left")
+        measurement_device_box = ttk.Combobox(preview_group, textvariable=self.measurement_device,
+                                               state="readonly", width=7,
+                                               values=MEASUREMENT_DEVICES)
+        measurement_device_box.pack(side="left", padx=(4, 10))
+        measurement_device_box.bind("<<ComboboxSelected>>", lambda _e: self._preview_measurement_chip())
+        ttk.Button(preview_group, text="Preview I-V curves",
+                   command=self._preview_measurement_chip).pack(side="left")
+        self.prediction_export_button = ttk.Button(
+            preview_group, text="Export chart", command=self._export_prediction_chart
+        )
+        self.prediction_export_button.pack(side="left", padx=(8, 0))
         self.figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.canvas = FigureCanvasTkAgg(self.figure, master=band_tab)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -293,8 +329,11 @@ class VoltageVisualizer(tk.Tk):
         NavigationToolbar2Tk(self.cv_canvas, cv_frame, pack_toolbar=True).update()
         self.prediction_figure = Figure(figsize=(13.2, 7.2), dpi=100, constrained_layout=True)
         self.prediction_canvas = FigureCanvasTkAgg(self.prediction_figure, master=prediction_tab)
+        self.prediction_toolbar = NavigationToolbar2Tk(self.prediction_canvas, prediction_tab,
+                                                       pack_toolbar=False)
+        self.prediction_toolbar.update()
+        self.prediction_toolbar.pack(side="top", fill="x", padx=8)
         self.prediction_canvas.get_tk_widget().pack(fill="both", expand=True)
-        NavigationToolbar2Tk(self.prediction_canvas, prediction_tab, pack_toolbar=True).update()
         self._draw_prediction_curves()
 
         footer = ttk.Frame(self, padding=(16, 3, 16, 8))
@@ -343,14 +382,90 @@ class VoltageVisualizer(tk.Tk):
         polarity = 1.0 if self.bulk.get() == "P-type" else -1.0
         self.predict_anchor_vg = polarity * dataset["voltage"]
         self.vg.set(self.predict_anchor_vg)
-        if dataset["rows"]:
+        chip_labels = [self._measurement_row_label(row) for row in dataset["rows"]]
+        self.measurement_row_box.configure(values=chip_labels)
+        if chip_labels:
+            if self.measurement_row.get() not in chip_labels:
+                self.measurement_row.set(chip_labels[0])
             first = dataset["rows"][0]
             self.predict_vt.set(float(first["PUL Vt"]))
             self.predict_idsat.set(float(first["PUL Idsat"]))
-        self.measurement_status.set(f"Source: {self.measurement_sheet.get()} · {len(dataset['rows'])} rows · Vt stays fixed; six Idsat columns are recalculated.")
+        else:
+            self.measurement_row.set("")
+        self.measurement_status.set(f"Source: {self.measurement_sheet.get()} - {len(dataset['rows'])} rows - Vt stays fixed; six Idsat columns are recalculated.")
 
     def _measurement_selection_changed(self):
         self._measurement_sheet_changed()
+
+    @staticmethod
+    def _measurement_row_label(record):
+        return f"{record.get('Lot/Wafer', '')} / {record.get('Chip ID', '')} - row {record.get('_excel_row', '')}"
+
+    def _selected_measurement_record(self):
+        dataset = self.measurements.get(self.measurement_sheet.get())
+        if not dataset:
+            return None, None
+        selected = self.measurement_row.get()
+        for record in dataset["rows"]:
+            if self._measurement_row_label(record) == selected:
+                return dataset, record
+        return dataset, dataset["rows"][0] if dataset["rows"] else None
+
+    def _preview_measurement_chip(self):
+        """Preview one Chip/device using the anchor and requested output Vgs list."""
+        try:
+            dataset, record = self._selected_measurement_record()
+            if dataset is None or record is None:
+                raise ValueError("Load a workbook containing at least one measurement row first")
+            voltages = parse_voltage_list(self.output_voltages.get())
+            device = self.measurement_device.get()
+            result = predict_measurement_record(dataset, record, device, voltages)
+            self.prediction_result = result
+            self.prediction_context = {
+                "chip": str(record.get("Chip ID", "")),
+                "lot": str(record.get("Lot/Wafer", "")),
+                "device": device,
+                "vt": float(record[f"{device} Vt"]),
+                "anchor_voltage": float(dataset["voltage"]),
+            }
+            self.predict_message.set(
+                f"{device} - Vt={self.prediction_context['vt']:.6g} - "
+                f"anchor Idsat={float(record[f'{device} Idsat']):.6g}"
+            )
+            self._draw_prediction_curves()
+            self.prediction_canvas.draw_idle()
+        except (tk.TclError, TypeError, ValueError, KeyError) as exc:
+            self.measurement_status.set(f"Preview error: {exc}")
+            messagebox.showerror("I-V preview", str(exc))
+
+    def _export_prediction_chart(self):
+        """Export only the currently visible Prediction chart."""
+        if not self.prediction_result:
+            messagebox.showwarning("Export chart", "Generate or preview I-V curves before exporting.")
+            return
+        context = self.prediction_context or {}
+        default_name = "mosfet_iv_prediction"
+        if context:
+            parts = (context.get("lot", ""), context.get("chip", ""), context.get("device", ""))
+            safe_parts = [re.sub(r"[^A-Za-z0-9_.-]+", "_", str(part)).strip("_")
+                          for part in parts if str(part).strip()]
+            if safe_parts:
+                default_name = "_".join(safe_parts) + "_iv"
+        path = filedialog.asksaveasfilename(
+            title="Export Prediction I-V chart",
+            initialfile=default_name + ".png",
+            defaultextension=".png",
+            filetypes=(("PNG image", "*.png"), ("PDF document", "*.pdf"),
+                       ("SVG image", "*.svg"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            self.prediction_figure.savefig(path, dpi=180, bbox_inches="tight")
+            self.measurement_status.set(f"Chart exported: {path}")
+            messagebox.showinfo("Export chart", f"Prediction chart saved to:\n{path}")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Export chart", str(exc))
 
     def _convert_all_rows(self):
         if not self.measurement_path or not self.measurement_sheet.get():
@@ -366,7 +481,7 @@ class VoltageVisualizer(tk.Tk):
                                                    voltages, output_path)
             polarity = 1.0 if self.bulk.get() == "P-type" else -1.0
             self.predict_specified.set(",".join(f"{polarity * voltage:.6g}" for voltage in voltages))
-            self._run_prediction()
+            self._preview_measurement_chip()
             names = ", ".join(target_names)
             self.measurement_status.set(f"Saved {names}: all rows converted; only six Idsat columns changed.")
             messagebox.showinfo("Measurement export", f"Saved converted sheets {names} to:\n{output_path}")
@@ -386,6 +501,7 @@ class VoltageVisualizer(tk.Tk):
                                              self.predict_idsat.get(), self.predict_step.get(),
                                              self.predict_points.get(), specified_vgs=specified)
             self.prediction_result = result
+            self.prediction_context = None
             rows = "; ".join(f"Vg={row['vg']:+.2f}, VDS,pinch-off={row['pinch_off_vds']:+.2f}, Idsat={row['idsat']:.3f}"
                              for row in result["rows"])
             self.predict_message.set(f"k={result['k']:.4f}; {rows}")
@@ -521,7 +637,7 @@ class VoltageVisualizer(tk.Tk):
             return
         # Prediction mode is a clean chart: no baseline teaching curves.
         axis.set_xlabel("|VDS| (V)")
-        axis.set_ylabel("|ID| (normalized)")
+        axis.set_ylabel("|ID| (same units as input Idsat)")
         axis.set_xlim(0, 3)
         max_id = max((abs(curve["idsat"]) for curve in self.prediction_result["curves"]), default=1.0)
         axis.set_ylim(0, max(max_id * 1.15, .01))
@@ -534,12 +650,12 @@ class VoltageVisualizer(tk.Tk):
             # from the physical origin (0, 0).
             axis.plot([abs(value) for value in curve["vds"]],
                       [abs(value) for value in curve["id"]], lw=2.0, color=color,
-                      label=f"pred Vgs={curve['vg']:+.3f} V")
+                      label=f"pred |Vgs|={abs(curve['vg']):.3f} V")
             pinch_vds = abs(curve["pinch_off_vds"])
             idsat = abs(curve["idsat"])
             axis.scatter([pinch_vds], [idsat], s=30, color=color, zorder=6)
             axis.annotate(
-                f"Vg={curve['vg']:+.3f} V\nIdsat={idsat:.4f}",
+                f"|Vgs|={abs(curve['vg']):.3f} V\nIdsat={idsat:.4f}",
                 xy=(pinch_vds, idsat),
                 xytext=(8, 10 + (index % 3) * 22), textcoords="offset points",
                 fontsize=7.5, color=color,
@@ -548,7 +664,13 @@ class VoltageVisualizer(tk.Tk):
             )
         # Pinch-off labels carry the readout; prediction mode intentionally
         # omits a separate legend to keep the chart uncluttered.
-        axis.set_title("MOSFET output I-V · predicted Vg sweep", fontsize=13, weight="bold")
+        if self.prediction_context:
+            context = self.prediction_context
+            title = (f"{context['lot']} / {context['chip']} - {context['device']} output I-V\n"
+                     f"anchor={context['anchor_voltage']:.3g} V, Vt={context['vt']:.6g} V")
+        else:
+            title = "MOSFET output I-V · predicted Vg sweep"
+        axis.set_title(title, fontsize=13, weight="bold")
 
     def _animate(self):
         self.phase = (self.phase + .07) % 1.0
