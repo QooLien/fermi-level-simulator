@@ -296,7 +296,8 @@ class VoltageVisualizer(tk.Tk):
 
     def _load_measurements(self):
         path = filedialog.askopenfilename(title="Select measurement workbook",
-                                          filetypes=(("Excel workbook", "*.xlsx"), ("All files", "*.*")))
+                                          filetypes=(("Excel files", "*.xlsx *.xlsm *.xltx *.xltm *.xls"),
+                                                     ("All files", "*.*")))
         if not path:
             return
         try:
